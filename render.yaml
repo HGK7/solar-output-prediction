@@ -1,0 +1,21 @@
+# Render Blueprint — Infrastructure as Code
+# https://docs.render.com/blueprint-spec
+
+services:
+  - type: web
+    name: solar-api
+    runtime: python
+    region: oregon
+    plan: free
+    rootDir: solar-output-prediction/backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false  # Set manually in Render dashboard
+      - key: CORS_ORIGINS
+        sync: false  # Set to your Vercel domain
+      - key: FLASK_DEBUG
+        value: "false"
+      - key: PYTHON_VERSION
+        value: "3.12.0"
