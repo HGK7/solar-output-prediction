@@ -7,7 +7,7 @@ services:
     runtime: python
     region: oregon
     plan: free
-    rootDir: solar-output-prediction/backend
+    rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app
     envVars:
