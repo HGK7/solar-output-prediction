@@ -43,6 +43,7 @@ class VectorStore:
         ids: list[str],
     ) -> None:
         """Add a batch of text chunks to the collection."""
+        self._ensure_initialized()
         self._collection.add(
             documents=documents,
             metadatas=metadatas,
@@ -50,6 +51,8 @@ class VectorStore:
         )
 
     def count(self) -> int:
+        if not self._initialized:
+            return 0
         return self._collection.count()
 
     # ------------------------------------------------------------------
@@ -63,6 +66,7 @@ class VectorStore:
         Returns the raw ChromaDB result dict with keys:
         ids, documents, metadatas, distances
         """
+        self._ensure_initialized()
         return self._collection.query(
             query_texts=[query_text],
             n_results=k,

@@ -49,11 +49,9 @@ def create_app() -> Flask:
     model_manager = ModelManager()
     model_manager.initialize()
 
-    # --- Initialize RAG vector store ---
-    logger.info("Initializing RAG vector store …")
+    # --- Initialize RAG vector store (lazy — loads on first /ask request) ---
     vectorstore = VectorStore()
-    n_chunks = ingest_documents(vectorstore)
-    logger.info("RAG knowledge base: %d chunks indexed", n_chunks)
+    logger.info("RAG vector store registered (lazy init — loads on first query)")
 
     # --- Initialize services ---
     prediction_service = PredictionService(model_manager)
@@ -62,6 +60,9 @@ def create_app() -> Flask:
     nasa_service = NASAService()
     financial_service = FinancialService()
     geometry_service = SolarGeometryService()
+
+    # Track whether RAG docs have been ingested (deferred to first /ask call)
+    _rag_ingested = {"done": False}
 
     # ──────────────────────────────────────────
     # Error handlers
@@ -156,6 +157,13 @@ def create_app() -> Flask:
         Body (JSON): { "question": "..." }
         """
         try:
+            # Lazy-ingest RAG documents on first /ask call
+            if not _rag_ingested["done"]:
+                logger.info("First /ask request — ingesting RAG documents …")
+                n_chunks = ingest_documents(vectorstore)
+                logger.info("RAG knowledge base: %d chunks indexed", n_chunks)
+                _rag_ingested["done"] = True
+
             payload = request.get_json(force=True)
             question = payload.get("question", "").strip()
             if not question:
