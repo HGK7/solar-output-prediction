@@ -158,8 +158,8 @@ export default function DashboardPage() {
             Select Location
           </h2>
           <p className="text-sm text-muted-foreground">
-            Click the map or drag the pin to choose a location. You can also
-            enter coordinates manually.
+            Search for a city to zoom in, then click the map or drag the pin
+            to pinpoint your location. You can also enter coordinates manually.
           </p>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

@@ -76,7 +76,7 @@ function DriverCard({ driver, index }: { driver: KeyDriver; index: number }) {
 
   return (
     <div
-      className="animate-in fade-in slide-in-from-bottom-2 duration-500 rounded-xl bg-gradient-to-br from-violet-50/60 via-white/40 to-purple-50/40 backdrop-blur-sm border border-white/40 p-4 hover:shadow-md transition-all hover:-translate-y-0.5"
+      className="animate-in fade-in slide-in-from-bottom-2 duration-500 rounded-xl bg-gradient-to-br from-violet-50/60 via-white/40 to-purple-50/40 backdrop-blur-sm border border-white/40 p-4 hover:shadow-md transition-all hover:-translate-y-0.5 h-full flex flex-col"
       style={{ animationDelay: `${index * 80}ms`, animationFillMode: "backwards" }}
     >
       <div className="flex items-start gap-3">
@@ -88,7 +88,7 @@ function DriverCard({ driver, index }: { driver: KeyDriver; index: number }) {
           <p className="text-xs text-muted-foreground mb-1">
             {driver.value} {driver.unit}
           </p>
-          <p className="text-sm text-foreground/70 leading-relaxed line-clamp-3">
+          <p className="text-sm text-foreground/70 leading-relaxed">
             {highlightValues(driver.impact)}
           </p>
         </div>

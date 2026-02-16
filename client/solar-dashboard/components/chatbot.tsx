@@ -1,77 +1,12 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { MessageCircle, Send, Loader2, Sparkles } from "lucide-react";
-import { askQuestion } from "@/lib/api";
-import { ChatMessage } from "@/components/chat-message";
-import type { ChatMessage as ChatMessageType, RAGCitation } from "@/types";
+import { MessageCircle, Sparkles, Construction } from "lucide-react";
 
 export function Chatbot() {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<ChatMessageType[]>([
-    {
-      id: "welcome",
-      role: "assistant",
-      content:
-        "Hello! I can answer questions about solar energy, panel efficiency, weather impacts, and installation best practices. Ask me anything!",
-      timestamp: new Date(),
-    },
-  ]);
-  const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  // Auto-scroll to bottom on new messages
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
-
-  const handleSend = async () => {
-    const question = input.trim();
-    if (!question || isLoading) return;
-
-    const userMsg: ChatMessageType = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content: question,
-      timestamp: new Date(),
-    };
-
-    setMessages((prev) => [...prev, userMsg]);
-    setInput("");
-    setIsLoading(true);
-
-    try {
-      const response = await askQuestion(question);
-
-      const citations: RAGCitation[] = response.citations ?? [];
-      const assistantMsg: ChatMessageType = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: response.answer,
-        citations: citations.length > 0 ? citations : undefined,
-        timestamp: new Date(),
-      };
-
-      setMessages((prev) => [...prev, assistantMsg]);
-    } catch (err) {
-      const errorMsg: ChatMessageType = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: `Sorry, I couldn't process your question. ${(err as Error).message}`,
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMsg]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
@@ -91,47 +26,26 @@ export function Chatbot() {
           </SheetTitle>
         </SheetHeader>
 
-        {/* Messages */}
-        <ScrollArea className="flex-1 px-4" ref={scrollRef}>
-          <div className="space-y-3 py-4">
-            {messages.map((msg) => (
-              <ChatMessage key={msg.id} message={msg} />
-            ))}
-            {isLoading && (
-              <div className="flex justify-start">
-                <div className="rounded-2xl rounded-bl-md bg-white/70 backdrop-blur-sm border border-white/40 px-4 py-3">
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                </div>
-              </div>
-            )}
+        {/* Work-in-Progress state */}
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6 text-center">
+          <div className="h-16 w-16 rounded-2xl bg-amber-100/60 flex items-center justify-center">
+            <Construction className="h-8 w-8 text-amber-500" />
           </div>
-        </ScrollArea>
-
-        {/* Input */}
-        <div className="border-t border-white/30 p-4">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSend();
-            }}
-            className="flex gap-2"
-          >
-            <Input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask about solar energy…"
-              disabled={isLoading}
-              className="bg-white/70 border-white/40"
-            />
-            <Button
-              type="submit"
-              size="icon"
-              disabled={!input.trim() || isLoading}
-              className="bg-amber-400 hover:bg-amber-500 text-foreground shrink-0"
-            >
-              <Send className="h-4 w-4" />
-            </Button>
-          </form>
+          <div className="space-y-2">
+            <h3 className="text-lg font-semibold text-foreground">
+              Coming Soon
+            </h3>
+            <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
+              The Solar Knowledge Assistant is currently under development.
+              It will answer questions about solar energy, panel efficiency,
+              regulations, and installation best practices — all grounded
+              in verified sources.
+            </p>
+          </div>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200/60 px-3 py-1 text-xs font-medium text-amber-700">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
+            Work in Progress
+          </span>
         </div>
       </SheetContent>
     </Sheet>
