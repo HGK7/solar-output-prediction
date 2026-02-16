@@ -12,9 +12,6 @@ The deprecated google-generativeai package is NOT used.
 import json
 import os
 
-from google import genai
-from google.genai import types
-
 from config import Config
 from rag.vectorstore import VectorStore
 from utils.logging import logger
@@ -27,7 +24,7 @@ class RAGService:
 
     def __init__(self, vectorstore: VectorStore):
         self._vectorstore = vectorstore
-        self._client: genai.Client | None = None
+        self._client = None
         self._prompt_template: str = self._load_prompt("rag_prompt.txt")
 
     # ------------------------------------------------------------------
@@ -64,9 +61,9 @@ class RAGService:
 
         # --- Augment & call LLM ---
         client = self._get_client()
-        prompt = self._prompt_template.format(
-            context=context_text, question=question
-        )
+        prompt = self._prompt_template.format(context=context_text, question=question)
+
+        from google.genai import types
 
         logger.info("Sending RAG query to Gemini (sources: %d) …", len(documents))
         response = client.models.generate_content(
@@ -85,8 +82,10 @@ class RAGService:
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _get_client(self) -> genai.Client:
+    def _get_client(self):
         if self._client is None:
+            from google import genai
+
             if not Config.GEMINI_API_KEY:
                 raise RuntimeError(
                     "GEMINI_API_KEY is not configured. "

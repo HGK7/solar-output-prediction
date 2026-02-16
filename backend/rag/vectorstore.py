@@ -3,10 +3,10 @@ ChromaDB vector store wrapper.
 
 Uses in-memory persistence (no disk backend) for MVP.
 Embeddings are computed locally via sentence-transformers (all-MiniLM-L6-v2).
-"""
 
-import chromadb
-from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
+Heavy dependencies (chromadb, sentence-transformers) are lazy-loaded on first
+use so the application starts quickly and stays under Render free-tier memory.
+"""
 
 from config import Config
 from utils.logging import logger
@@ -18,10 +18,30 @@ class VectorStore:
     COLLECTION_NAME = "solar_knowledge"
 
     def __init__(self):
+        # Defer all heavy imports until first real use
+        self._client = None
+        self._embedding_fn = None
+        self._collection = None
+        self._initialized = False
+        logger.info("VectorStore registered (lazy — loads on first use)")
+
+    # ------------------------------------------------------------------
+    # Lazy initializer
+    # ------------------------------------------------------------------
+
+    def _ensure_initialized(self) -> None:
+        """Load ChromaDB + sentence-transformers on first access."""
+        if self._initialized:
+            return
+
+        import chromadb
+        from chromadb.utils.embedding_functions import (
+            SentenceTransformerEmbeddingFunction,
+        )
+
         logger.info(
             "Initializing ChromaDB (in-memory) with %s …", Config.EMBEDDING_MODEL
         )
-        # Disable telemetry to avoid noisy warnings
         self._client = chromadb.Client(chromadb.Settings(anonymized_telemetry=False))
         self._embedding_fn = SentenceTransformerEmbeddingFunction(
             model_name=Config.EMBEDDING_MODEL
@@ -30,6 +50,7 @@ class VectorStore:
             name=self.COLLECTION_NAME,
             embedding_function=self._embedding_fn,
         )
+        self._initialized = True
         logger.info("VectorStore ready (collection: %s)", self.COLLECTION_NAME)
 
     # ------------------------------------------------------------------
@@ -51,6 +72,7 @@ class VectorStore:
         )
 
     def count(self) -> int:
+        """Return chunk count without triggering lazy init."""
         if not self._initialized:
             return 0
         return self._collection.count()

@@ -9,9 +9,6 @@ On application startup the ModelManager:
 
 import os
 
-import pandas as pd
-from sklearn.model_selection import train_test_split
-
 from config import Config
 from models.regression import LinearRegressionModel
 from models.svm import SVMModel
@@ -80,6 +77,9 @@ class ModelManager:
 
     def _load_data(self):
         """Load and split the cleaned CSV into train/test arrays."""
+        import pandas as pd
+        from sklearn.model_selection import train_test_split
+
         logger.info("Loading data from %s", Config.DATA_PATH)
         df = pd.read_csv(Config.DATA_PATH)
 

@@ -8,14 +8,25 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
 
 // ── Health Check ──
 
-export async function healthCheck(): Promise<{
+export async function healthCheck(
+  timeoutMs = 8000,
+): Promise<{
   status: string;
   models_loaded: string[];
   rag_chunks: number;
 }> {
-  const res = await fetch(`${API_BASE}/health`);
-  if (!res.ok) throw new Error("Backend is not reachable.");
-  return res.json();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(`${API_BASE}/health`, {
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error("Backend is not reachable.");
+    return res.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // ── Full Analysis (non-streaming) ──

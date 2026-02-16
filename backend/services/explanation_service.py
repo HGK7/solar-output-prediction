@@ -13,8 +13,6 @@ import json
 import os
 
 from cachetools import TTLCache
-from google import genai
-from google.genai import types
 
 from config import Config
 from utils.logging import logger
@@ -30,7 +28,7 @@ class ExplanationService:
     """Generates structured natural-language explanations of predictions."""
 
     def __init__(self):
-        self._client: genai.Client | None = None  # Lazy init
+        self._client = None  # Lazy init
         self._prompt_template: str = self._load_prompt("explanation_prompt.txt")
 
     # ------------------------------------------------------------------
@@ -53,6 +51,8 @@ class ExplanationService:
 
         client = self._get_client()
         prompt = self._format_prompt(prediction_result)
+
+        from google.genai import types
 
         logger.info("Requesting explanation from Gemini …")
         response = client.models.generate_content(
@@ -94,8 +94,10 @@ class ExplanationService:
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _get_client(self) -> genai.Client:
+    def _get_client(self):
         if self._client is None:
+            from google import genai
+
             if not Config.GEMINI_API_KEY:
                 raise RuntimeError(
                     "GEMINI_API_KEY is not configured. "
