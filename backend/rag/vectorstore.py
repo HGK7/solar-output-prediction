@@ -31,7 +31,7 @@ class VectorStore:
 
     def _ensure_initialized(self) -> None:
         """Load ChromaDB + sentence-transformers on first access."""
-        if self._initialized:
+        if getattr(self, "_initialized", False):
             return
 
         import chromadb
@@ -73,9 +73,12 @@ class VectorStore:
 
     def count(self) -> int:
         """Return chunk count without triggering lazy init."""
-        if not self._initialized:
+        if not getattr(self, "_initialized", False):
             return 0
-        return self._collection.count()
+        collection = getattr(self, "_collection", None)
+        if collection is None:
+            return 0
+        return collection.count()
 
     # ------------------------------------------------------------------
     # Read path

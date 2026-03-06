@@ -49,9 +49,25 @@ class Config:
     TARGET_UNIT: str = "kWh/m²/day"
 
     # --- Flask ---
-    CORS_ORIGINS: list[str] = os.getenv(
-        "CORS_ORIGINS", "http://localhost:3000"
-    ).split(",")
+    # Accept both CORS_ORIGINS (preferred) and CORS_ORIGIN (legacy/single-origin).
+    _CORS_RAW: str = os.getenv("CORS_ORIGINS") or os.getenv(
+        "CORS_ORIGIN", "http://localhost:3000"
+    )
+
+    @staticmethod
+    def _parse_origins(raw: str) -> list[str]:
+        origins: list[str] = []
+        for chunk in raw.replace(";", ",").split(","):
+            origin = chunk.strip()
+            if not origin:
+                continue
+            if origin != "*":
+                # Browsers send Origin without trailing slash.
+                origin = origin.rstrip("/")
+            origins.append(origin)
+        return origins or ["http://localhost:3000"]
+
+    CORS_ORIGINS: list[str] = _parse_origins.__func__(_CORS_RAW)
     DEBUG: bool = os.getenv("FLASK_DEBUG", "false").lower() == "true"
 
     @classmethod

@@ -91,11 +91,27 @@ def create_app() -> Flask:
     @application.route("/health", methods=["GET"])
     def health():
         """Readiness / liveness probe."""
+        models_loaded = []
+        rag_chunks = 0
+        warnings = []
+
+        try:
+            models_loaded = model_manager.list_models()
+        except Exception as exc:
+            warnings.append(f"model_status_unavailable: {exc}")
+
+        try:
+            rag_chunks = vectorstore.count()
+        except Exception as exc:
+            warnings.append(f"rag_status_unavailable: {exc}")
+
+        status = "healthy" if not warnings else "degraded"
         return jsonify(
             {
-                "status": "healthy",
-                "models_loaded": model_manager.list_models(),
-                "rag_chunks": vectorstore.count(),
+                "status": status,
+                "models_loaded": models_loaded,
+                "rag_chunks": rag_chunks,
+                "warnings": warnings,
             }
         )
 
