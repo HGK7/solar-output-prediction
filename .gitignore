@@ -4,6 +4,13 @@ __pycache__/
 *.py[cod]
 .env
 
+# Research / data artifacts (not needed in production package)
+*.ipynb
+*.csv
+
+# Keep specific runtime assets tracked
+!backend/trained_models/*.joblib
+
 # Data (too large for git)
 data.csv
 
