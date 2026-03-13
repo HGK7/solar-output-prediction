@@ -1,7 +1,10 @@
 "use client";
 
 import { RefreshCw, Wifi, WifiOff, Loader2, Moon } from "lucide-react";
-import { useBackendStatus, type BackendStatus } from "@/lib/use-backend-status";
+import {
+  useBackendStatusContext,
+} from "@/lib/backend-status-context";
+import type { BackendStatus } from "@/lib/use-backend-status";
 
 const STATUS_CONFIG: Record<
   BackendStatus,
@@ -43,7 +46,7 @@ function timeAgo(date: Date | null): string {
 }
 
 export function ConnectionStatusBar() {
-  const { status, lastChecked, retry } = useBackendStatus();
+  const { status, lastChecked, retry } = useBackendStatusContext();
   const cfg = STATUS_CONFIG[status];
   const Icon = cfg.icon;
 
@@ -67,17 +70,16 @@ export function ConnectionStatusBar() {
         <span className="opacity-60">· checked {timeAgo(lastChecked)}</span>
       )}
 
-      {/* Retry button — shown when sleeping or unreachable */}
-      {(status === "sleeping" || status === "unreachable") && (
-        <button
-          onClick={retry}
-          className="ml-1 inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium hover:bg-white/60 transition-colors cursor-pointer"
-          aria-label="Retry connection"
-        >
-          <RefreshCw className="h-3 w-3" />
-          Retry
-        </button>
-      )}
+      <button
+        onClick={() => {
+          void retry();
+        }}
+        className="ml-1 inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium hover:bg-white/60 transition-colors cursor-pointer"
+        aria-label="Refresh backend connection status"
+      >
+        <RefreshCw className="h-3 w-3" />
+        Refresh
+      </button>
     </div>
   );
 }

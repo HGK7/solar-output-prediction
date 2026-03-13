@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ConnectionStatusBar } from "@/components/connection-status-bar";
+import { BackendStatusProvider } from "@/lib/backend-status-context";
 
 const inter = Inter({
   variable: "--font-sans",
@@ -22,8 +23,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.variable} font-sans antialiased`}>
-        <ConnectionStatusBar />
-        {children}
+        <BackendStatusProvider>
+          <ConnectionStatusBar />
+          {children}
+        </BackendStatusProvider>
       </body>
     </html>
   );

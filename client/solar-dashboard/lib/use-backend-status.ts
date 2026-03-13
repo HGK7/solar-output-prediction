@@ -21,7 +21,7 @@ export function useBackendStatus() {
   }, []);
 
   const check = useCallback(async () => {
-    setStatus("checking");
+    setStatus((prev) => (prev === "connected" ? prev : "checking"));
     try {
       await healthCheck(HEALTH_TIMEOUT_MS);
       setStatus("connected");
@@ -46,11 +46,11 @@ export function useBackendStatus() {
 
   // Called when an API call (e.g. /analyze) fails — re-checks backend
   const markDisconnected = useCallback(() => {
-    setStatus("unreachable");
+    setStatus("checking");
     setLastChecked(new Date());
     startPolling();
     // Also fire an immediate check
-    check();
+    void check();
   }, [check, startPolling]);
 
   // Initial check + polling until connected

@@ -14,6 +14,7 @@ import { FeatureChart } from "@/components/feature-chart";
 import { OutputChart } from "@/components/output-chart";
 import { Chatbot } from "@/components/chatbot";
 import { streamPlan, analyze } from "@/lib/api";
+import { useBackendStatusContext } from "@/lib/backend-status-context";
 import type {
   PredictionResult,
   FinancialSummary,
@@ -39,6 +40,8 @@ const LocationMap = dynamic(
 type LoadingStage = "idle" | "location" | "prediction" | "financial" | "explanation" | "complete" | "error";
 
 export default function DashboardPage() {
+  const { markDisconnected } = useBackendStatusContext();
+
   // Location state
   const [lat, setLat] = useState(27.5);  // Bhadla Solar Park defaults
   const [lon, setLon] = useState(71.6);
@@ -99,12 +102,13 @@ export default function DashboardPage() {
         case "error":
           setError(data.error as string);
           setStage("error");
+          markDisconnected();
           break;
       }
     });
 
     cancelRef.current = cancel;
-  }, [lat, lon]);
+  }, [lat, lon, markDisconnected]);
 
   // ── Manual features analysis (non-streaming fallback) ──
   const handleManualAnalyze = useCallback(async (features: Record<string, number>) => {
@@ -129,8 +133,9 @@ export default function DashboardPage() {
     } catch (err) {
       setError((err as Error).message);
       setStage("error");
+      markDisconnected();
     }
-  }, []);
+  }, [markDisconnected]);
 
   const hasResults = prediction || financial || explanation || monthly;
 
