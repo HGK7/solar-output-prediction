@@ -1,282 +1,306 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
-import dynamic from "next/dynamic";
+import Link from "next/link";
+import {
+  ArrowRight,
+  ChartColumn,
+  CircleUserRound,
+  Dot,
+  Layers,
+  LogIn,
+  MapPin,
+  Sparkles,
+  Sun,
+  Thermometer,
+  UserPlus,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Sun, MapPin, Loader2 } from "lucide-react";
-import { CoordinateInput } from "@/components/coordinate-input";
-import { ManualParamsForm } from "@/components/manual-params-form";
-import { PredictionCard } from "@/components/prediction-card";
-import { FinancialCard } from "@/components/financial-card";
-import { ExplanationPanel } from "@/components/explanation-panel";
-import { FeatureChart } from "@/components/feature-chart";
-import { OutputChart } from "@/components/output-chart";
-import { Chatbot } from "@/components/chatbot";
-import { streamPlan, analyze } from "@/lib/api";
-import { useBackendStatusContext } from "@/lib/backend-status-context";
-import type {
-  PredictionResult,
-  FinancialSummary,
-  ExplanationResponse,
-  MonthlyData,
-  GeometryResult,
-  DataProvenance,
-} from "@/types";
+import { SolarArchiveFeed } from "@/components/SolarArchiveFeed";
 
-// Dynamic import for Leaflet map (no SSR)
-const LocationMap = dynamic(
-  () => import("@/components/location-map").then((m) => m.LocationMap),
+const RSS_FEED_URL = "https://renewablesnow.com/news/news_feed/?source=solar";
+const RSS_NEWS_PAGE_URL = "https://renewablesnow.com/news/solar/";
+
+const NAV_ITEMS = [
+  // Methodology and Data Sources are paused for MVP iteration and will return in final documentation.
+  // { label: "Methodology", href: "#methodology" },
+  // { label: "Data Sources", href: "#archive" },
+
+  // API access, docs and other links are deferred until the post-MVP bibliography stage.
+  // { label: "API Access", href: "/dashboard" },
+  // { label: "Documentation", href: "#footer" },
+
+  { label: "Dashboard", href: "/dashboard" },
+];
+
+const SCIENCE_CARDS = [
   {
-    ssr: false,
-    loading: () => (
-      <div className="h-87.5 w-full rounded-xl bg-white/50 backdrop-blur-sm border border-white/40 flex items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    ),
+    title: "Spectral Analysis",
+    description:
+      "Evaluates light spectrum distribution based on local atmospheric composition for panel selection.",
+    value: "350-2500nm",
+    sub: "Range monitored",
+    icon: Layers,
   },
-);
+  {
+    title: "Thermal Dynamics",
+    description:
+      "Predicts panel-level thermal response to reduce efficiency drop in harsh micro-climates.",
+    value: "-0.34%/°C",
+    sub: "Coefficient model",
+    icon: Thermometer,
+  },
+  {
+    title: "Albedo Tracking",
+    description:
+      "Accounts for ground reflectance to optimize bifacial panel orientation and mounting decisions.",
+    value: "0.22 Avg",
+    sub: "Surface reflectance",
+    icon: MapPin,
+  },
+] as const;
 
-type LoadingStage = "idle" | "location" | "prediction" | "financial" | "explanation" | "complete" | "error";
-
-export default function DashboardPage() {
-  const { markDisconnected } = useBackendStatusContext();
-
-  // Location state
-  const [lat, setLat] = useState(27.5);  // Bhadla Solar Park defaults
-  const [lon, setLon] = useState(71.6);
-
-  // Analysis results
-  const [prediction, setPrediction] = useState<PredictionResult | null>(null);
-  const [financial, setFinancial] = useState<FinancialSummary | null>(null);
-  const [explanation, setExplanation] = useState<ExplanationResponse | null>(null);
-  const [monthly, setMonthly] = useState<Record<string, MonthlyData> | null>(null);
-  const [geometry, setGeometry] = useState<GeometryResult | null>(null);
-  const [dataProvenance, setDataProvenance] = useState<DataProvenance | null>(null);
-
-  // UI state
-  const [stage, setStage] = useState<LoadingStage>("idle");
-  const [error, setError] = useState<string | null>(null);
-  const cancelRef = useRef<(() => void) | null>(null);
-
-  const isLoading = stage !== "idle" && stage !== "complete" && stage !== "error";
-
-  // ── Streamed analysis (primary path) ──
-  const handleAnalyze = useCallback(() => {
-    // Reset state
-    setPrediction(null);
-    setFinancial(null);
-    setExplanation(null);
-    setMonthly(null);
-    setGeometry(null);
-    setDataProvenance(null);
-    setError(null);
-    setStage("location");
-
-    const { cancel } = streamPlan(lat, lon, (event, data) => {
-      switch (event) {
-        case "stage":
-          setStage(data.stage as LoadingStage);
-          break;
-        case "location":
-          setMonthly(data.monthly as Record<string, MonthlyData>);
-          if (data.data_provenance) {
-            setDataProvenance(data.data_provenance as unknown as DataProvenance);
-          }
-          break;
-        case "prediction":
-          setPrediction(data as unknown as PredictionResult);
-          break;
-        case "financial":
-          setFinancial(data as unknown as FinancialSummary);
-          break;
-        case "geometry":
-          setGeometry(data as unknown as GeometryResult);
-          break;
-        case "explanation":
-          setExplanation(data as unknown as ExplanationResponse);
-          break;
-        case "done":
-          setStage("complete");
-          break;
-        case "error":
-          setError(data.error as string);
-          setStage("error");
-          markDisconnected();
-          break;
-      }
-    });
-
-    cancelRef.current = cancel;
-  }, [lat, lon, markDisconnected]);
-
-  // ── Manual features analysis (non-streaming fallback) ──
-  const handleManualAnalyze = useCallback(async (features: Record<string, number>) => {
-    setPrediction(null);
-    setFinancial(null);
-    setExplanation(null);
-    setMonthly(null);
-    setGeometry(null);
-    setDataProvenance(null);
-    setError(null);
-    setStage("prediction");
-
-    try {
-      const result = await analyze({ features });
-      setPrediction(result.prediction);
-      setFinancial(result.financial);
-      setExplanation(result.explanation);
-      if (result.monthly) setMonthly(result.monthly);
-      if (result.geometry) setGeometry(result.geometry);
-      if (result.data_provenance) setDataProvenance(result.data_provenance);
-      setStage("complete");
-    } catch (err) {
-      setError((err as Error).message);
-      setStage("error");
-      markDisconnected();
-    }
-  }, [markDisconnected]);
-
-  const hasResults = prediction || financial || explanation || monthly;
-
+export default function HomePage() {
   return (
-    <div className="min-h-screen bg-linear-to-br from-yellow-50 via-sky-50 to-white">
-      {/* ── Hero / Header ── */}
-      <header className="py-10 px-6 md:px-12 text-center">
-        <div className="flex items-center justify-center gap-3 mb-3">
-          <Sun className="h-8 w-8 text-amber-400" />
-          <h1 className="text-3xl md:text-4xl font-bold text-foreground">
-            Solar Intelligence Dashboard
-          </h1>
-        </div>
-        <p className="text-muted-foreground max-w-2xl mx-auto text-base">
-          AI-powered solar energy analysis — predict output, evaluate ROI, and
-          get expert recommendations for any location worldwide.
-        </p>
-      </header>
-
-      <main className="px-6 md:px-12 pb-20 max-w-7xl mx-auto space-y-10">
-        {/* ── Section 1: Location Input ── */}
-        <section className="space-y-4">
-          <h2 className="text-xl font-semibold flex items-center gap-2">
-            <MapPin className="h-5 w-5 text-sky-400" />
-            Select Location
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Search for a city to zoom in, then click the map or drag the pin
-            to pinpoint your location. You can also enter coordinates manually.
-          </p>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Map */}
-            <div className="lg:col-span-2">
-              <LocationMap lat={lat} lon={lon} onLocationChange={(newLat, newLon) => { setLat(newLat); setLon(newLon); }} />
-            </div>
-
-            {/* Controls */}
-            <div className="space-y-4">
-              <CoordinateInput
-                lat={lat}
-                lon={lon}
-                onLatChange={setLat}
-                onLonChange={setLon}
-              />
-
-              <Button
-                onClick={handleAnalyze}
-                disabled={isLoading}
-                size="lg"
-                className="w-full bg-amber-400 hover:bg-amber-500 text-foreground font-semibold text-base shadow-md shadow-amber-200/40"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                    {stage === "location" && "Fetching location data…"}
-                    {stage === "prediction" && "Running prediction…"}
-                    {stage === "financial" && "Calculating financials…"}
-                    {stage === "explanation" && "Generating explanation…"}
-                  </>
-                ) : (
-                  <>
-                    <Sun className="h-5 w-5 mr-2" />
-                    Analyze Solar Potential
-                  </>
-                )}
-              </Button>
-
-              <ManualParamsForm
-                onSubmit={handleManualAnalyze}
-                isLoading={isLoading}
-              />
-            </div>
-          </div>
-        </section>
-
-        {/* ── Error Display ── */}
-        {error && (
-          <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-600">
-            {error}
-          </div>
-        )}
-
-        {/* ── Section 2: Results ── */}
-        {(hasResults || isLoading) && (
-          <>
-            <Separator className="bg-white/40" />
-
-            <section className="space-y-6">
-              {/* Top row: prediction + financial cards */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <PredictionCard
-                  prediction={prediction}
-                  isLoading={stage === "location" || stage === "prediction"}
-                  dataProvenance={dataProvenance}
-                />
-                <FinancialCard
-                  financial={financial}
-                  geometry={geometry}
-                  isLoading={stage === "location" || stage === "prediction" || stage === "financial"}
-                />
+    <div className="h-full overflow-hidden bg-[#f1f1f1]">
+      <ScrollArea className="app-shell-scroll h-full">
+        <main className="flex min-h-full w-full flex-col">
+          <section className="border-b border-border/50 bg-white" id="top">
+            <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 md:px-6">
+              <div className="flex items-center gap-6">
+                <div className="flex items-center gap-2 font-semibold text-amber-500">
+                  <Sun className="h-5 w-5" /> HELIOS
+                </div>
+                <nav className="hidden items-center gap-5 text-xs text-muted-foreground md:flex">
+                  {NAV_ITEMS.map((item) => (
+                    <a key={item.label} href={item.href} className="hover:text-foreground">
+                      {item.label}
+                    </a>
+                  ))}
+                </nav>
               </div>
 
-              {/* Charts row */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <OutputChart
-                  monthly={monthly}
-                  isLoading={stage === "location"}
-                />
-                <FeatureChart
-                  featureImportance={prediction?.feature_importance ?? null}
-                  isLoading={stage === "location" || stage === "prediction"}
-                />
+              <div className="flex items-center gap-2">
+                <Button asChild size="sm" variant="ghost" className="text-xs">
+                  <Link href="/login">
+                    <LogIn className="h-4 w-4" /> Login
+                  </Link>
+                </Button>
+                <Button asChild size="sm" variant="outline" className="text-xs">
+                  <Link href="/signup">
+                    <UserPlus className="h-4 w-4" /> Create account
+                  </Link>
+                </Button>
+                <Button asChild size="sm" className="bg-amber-400 text-foreground hover:bg-amber-500 text-xs">
+                  <Link href="/dashboard">Go to Dashboard</Link>
+                </Button>
+              </div>
+            </div>
+          </section>
+
+          <section className="bg-[#f7f7f4]">
+            <div className="mx-auto grid w-full max-w-7xl gap-8 px-6 py-10 md:grid-cols-2 md:px-10">
+              <div className="space-y-6">
+                <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">Alpha</Badge>
+
+                <div>
+                  <h1 className="text-5xl font-black leading-tight text-foreground md:text-6xl">Precision Solar</h1>
+                  <h1 className="text-5xl font-black italic leading-tight text-amber-500 md:text-6xl">Optimization</h1>
+                </div>
+
+                <p className="max-w-xl text-muted-foreground md:text-lg">
+                  Optimize your solar installation with AI-powered analytics that combine irradiance data,
+                  panel behavior, and financial intelligence.
+                </p>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button asChild size="lg" className="bg-amber-400 text-foreground hover:bg-amber-500">
+                    <Link href="/dashboard">
+                      Go to Dashboard
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                  <div className="text-xs text-muted-foreground">
+                    <p className="font-medium text-foreground">Plan your solar journey</p>
+                    <p>Handle your solar energy planning with confidence</p>
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <p className="text-4xl font-black text-foreground">99.2%</p>
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Prediction accuracy</p>
+                  </div>
+                  <div>
+                    <p className="text-4xl font-black text-foreground">1.4B+</p>
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Data points processed</p>
+                  </div>
+                  <div>
+                    <p className="text-4xl font-black text-foreground">84</p>
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Scientific parameters</p>
+                  </div>
+                </div>
               </div>
 
-              {/* Explanation */}
-              <ExplanationPanel
-                explanation={explanation}
-                isLoading={
-                  stage === "location" ||
-                  stage === "prediction" ||
-                  stage === "financial" ||
-                  stage === "explanation"
-                }
-              />
-            </section>
-          </>
-        )}
+              <Card className="overflow-hidden rounded-2xl border-white/40 bg-white/75 shadow-lg backdrop-blur-md">
+                <CardHeader className="border-b border-border/50 bg-muted/30 py-4">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Target Location</CardTitle>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-2xl font-bold">Almeria, Spain</p>
+                    <Badge variant="secondary">Summer Solstice</Badge>
+                  </div>
+                </CardHeader>
 
-        {/* ── Disclaimer ── */}
-        <div className="text-center text-xs text-muted-foreground/60 pt-6">
-          <p>
-            Estimates are based on NASA POWER climatological data and
-            standardized cost models. Actual results will vary. Consult a
-            certified solar installer for project-specific guidance.
-          </p>
-        </div>
-      </main>
+                <CardContent className="space-y-4 p-5">
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <Card className="rounded-xl border-border/50 p-3">
+                      <p className="text-xs text-muted-foreground">Irradiance</p>
+                      <p className="text-2xl font-bold">1,042</p>
+                      <p className="text-xs text-muted-foreground">W/m²</p>
+                    </Card>
+                    <Card className="rounded-xl border-border/50 p-3">
+                      <p className="text-xs text-muted-foreground">Panel Efficiency</p>
+                      <p className="text-2xl font-bold">22.8</p>
+                      <p className="text-xs text-muted-foreground">%</p>
+                    </Card>
+                    <Card className="rounded-xl border-border/50 p-3">
+                      <p className="text-xs text-muted-foreground">Atmospheric Clarity</p>
+                      <p className="text-2xl font-bold">0.94</p>
+                      <p className="text-xs text-muted-foreground">index</p>
+                    </Card>
+                    <Card className="rounded-xl border-border/50 p-3">
+                      <p className="text-xs text-muted-foreground">Thermal Gain</p>
+                      <p className="text-2xl font-bold">+4.2</p>
+                      <p className="text-xs text-muted-foreground">°C</p>
+                    </Card>
+                  </div>
 
-      {/* ── Floating Chatbot ── */}
-      <Chatbot />
+                  <div className="relative rounded-xl border border-border/50 bg-muted/20 p-4">
+                    <div className="flex h-24 items-end gap-2">
+                      {[30, 48, 38, 56, 44, 72, 60, 41, 33].map((height, idx) => (
+                        <div key={`bar-${idx}`} className="flex-1 rounded-md bg-amber-100" style={{ height: `${height}%` }} />
+                      ))}
+                    </div>
+                    <p className="mt-2 text-center text-xs text-muted-foreground">Efficiency Yield Curve</p>
+                    <div className="absolute -bottom-3 right-2 rounded-xl bg-amber-400 px-3 py-2 text-xs font-semibold text-foreground shadow-md">
+                      Analysis result: +24.8%
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </section>
+
+          { /* Methodology, Data Sources, API Access, and Documentation are off-ramp for current MVP; adding these in final lifecycle as stub references. */}
+          {/*
+          <section className="bg-[#ecebdf]" id="methodology">
+            <div className="mx-auto w-full max-w-7xl px-6 py-16 md:px-10">
+              <Badge variant="secondary" className="mb-4">Scientific Parameters</Badge>
+              <h2 className="text-4xl font-black text-foreground">Beyond Simple Sun Tracking</h2>
+              <p className="mt-3 max-w-3xl text-muted-foreground">
+                This model includes localized environmental physics often missed by traditional
+                calculators to support professional-grade solar decisions.
+              </p>
+
+              <div className="mt-8 grid gap-4 md:grid-cols-3">
+                {SCIENCE_CARDS.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <Card key={item.title} className="rounded-2xl border-white/40 bg-white/80 p-4 shadow-sm">
+                      <CardHeader className="p-0">
+                        <div className="flex items-center gap-2">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                            <Icon className="h-4 w-4" />
+                          </div>
+                          <CardTitle className="text-xl">{item.title}</CardTitle>
+                        </div>
+                        <CardDescription className="pt-3">{item.description}</CardDescription>
+                      </CardHeader>
+                      <CardContent className="p-0 pt-6">
+                        <p className="text-4xl font-black text-foreground">{item.value}</p>
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">{item.sub}</p>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+          */}
+
+          <section className="bg-[#f3f3f3]" id="archive">
+            <div className="mx-auto grid w-full max-w-7xl gap-8 px-6 py-16 md:grid-cols-[290px_minmax(0,1fr)] md:px-10">
+              <div className="space-y-4">
+                <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">Scientific Pulse</Badge>
+                <h2 className="text-4xl font-black text-foreground">The Solar Archive</h2>
+                <p className="text-muted-foreground">
+                  Stay informed with the latest solar research, market trends, and technological breakthroughs.
+                </p>
+              </div>
+
+              <SolarArchiveFeed />
+            </div>
+          </section>
+
+          <footer className="space-y-8 border-t border-border/50 bg-white" id="footer">
+            <div className="mx-auto grid w-full max-w-7xl gap-8 px-6 py-10 md:grid-cols-4 md:px-10">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 font-semibold text-amber-500">
+                  <Sun className="h-5 w-5" /> HELIOS
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Scientific dashboard for solar precision. Built for analysis-first planning.
+                </p>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <a href="https://www.linkedin.com" target="_blank" rel="noreferrer" className="hover:text-foreground">LinkedIn</a>
+                  <Dot className="h-3 w-3" />
+                  <a href="https://www.researchgate.net" target="_blank" rel="noreferrer" className="hover:text-foreground">ResearchGate</a>
+                  <Dot className="h-3 w-3" />
+                  <a href="https://github.com/HGK7/solar-output-prediction" target="_blank" rel="noreferrer" className="hover:text-foreground">GitHub</a>
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Platform</p>
+                <ul className="space-y-2 text-sm text-foreground">
+                  <li><Link href="/dashboard" className="flex items-center gap-2 hover:text-amber-600"><ChartColumn className="h-4 w-4 text-muted-foreground" />Data Models</Link></li>
+                  <li><Link href="/dashboard" className="flex items-center gap-2 hover:text-amber-600"><Sparkles className="h-4 w-4 text-muted-foreground" />API Reference</Link></li>
+                  <li><Link href="/analytics" className="hover:text-amber-600">Integration</Link></li>
+                </ul>
+              </div>
+
+              <div>
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Company</p>
+                <ul className="space-y-2 text-sm text-foreground">
+                  <li><a href="#top" className="hover:text-amber-600">About Science</a></li>
+                  <li><a href="mailto:contact@helios.example" className="hover:text-amber-600">Contact Labs</a></li>
+                  <li><a href="#archive" className="hover:text-amber-600">Press Kit</a></li>
+                </ul>
+              </div>
+
+              <div>
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Compliance</p>
+                <ul className="space-y-2 text-sm text-foreground">
+                  <li><Link href="/profile" className="hover:text-amber-600">Privacy Policy</Link></li>
+                  <li><Link href="/profile" className="hover:text-amber-600">Terms of Data</Link></li>
+                  <li><a href="https://github.com/HGK7/solar-output-prediction" target="_blank" rel="noreferrer" className="hover:text-amber-600">Open Source</a></li>
+                </ul>
+              </div>
+            </div>
+
+            <Separator className="mx-auto w-full max-w-7xl" />
+            <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3 px-6 pb-10 text-xs text-muted-foreground md:px-10">
+              <p>© 2026 HELIOS Scientific Systems. Informational purposes only.</p>
+              <p>Scientific mode: active</p>
+            </div>
+          </footer>
+        </main>
+      </ScrollArea>
     </div>
   );
 }

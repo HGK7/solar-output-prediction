@@ -70,16 +70,18 @@ export function ConnectionStatusBar() {
         <span className="opacity-60">· checked {timeAgo(lastChecked)}</span>
       )}
 
-      <button
-        onClick={() => {
-          void retry();
-        }}
-        className="ml-1 inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium hover:bg-white/60 transition-colors cursor-pointer"
-        aria-label="Refresh backend connection status"
-      >
-        <RefreshCw className="h-3 w-3" />
-        Refresh
-      </button>
+      {status !== "connected" && (
+        <button
+          onClick={() => {
+            void retry();
+          }}
+          className="ml-1 inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium hover:bg-white/60 transition-colors cursor-pointer"
+          aria-label="Refresh backend connection status"
+        >
+          <RefreshCw className="h-3 w-3" />
+          Refresh
+        </button>
+      )}
     </div>
   );
 }

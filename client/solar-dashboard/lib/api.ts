@@ -58,7 +58,14 @@ export function streamPlan(
   lat: number,
   lon: number,
   onEvent: StreamPlanCallback,
-  options?: { model?: string; region?: string },
+  options?: {
+    model?: string;
+    region?: string;
+    system_capacity_kw?: number;
+    panel_efficiency?: number;
+    performance_ratio?: number;
+    electricity_tariff_usd?: number;
+  },
 ): { cancel: () => void } {
   const params = new URLSearchParams({
     lat: lat.toString(),
@@ -66,6 +73,19 @@ export function streamPlan(
     model: options?.model ?? "linear_regression",
     region: options?.region ?? "global",
   });
+
+  if (options?.system_capacity_kw !== undefined) {
+    params.set("system_capacity_kw", String(options.system_capacity_kw));
+  }
+  if (options?.panel_efficiency !== undefined) {
+    params.set("panel_efficiency", String(options.panel_efficiency));
+  }
+  if (options?.performance_ratio !== undefined) {
+    params.set("performance_ratio", String(options.performance_ratio));
+  }
+  if (options?.electricity_tariff_usd !== undefined) {
+    params.set("electricity_tariff_usd", String(options.electricity_tariff_usd));
+  }
 
   const controller = new AbortController();
 
@@ -99,6 +119,9 @@ export function streamPlan(
           } else if (line.startsWith("data: ")) {
             try {
               const data = JSON.parse(line.slice(6));
+              if (currentEvent === "ping") {
+                continue;
+              }
               onEvent(currentEvent, data);
             } catch {
               // Skip malformed data lines

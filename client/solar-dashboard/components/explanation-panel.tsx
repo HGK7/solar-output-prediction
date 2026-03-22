@@ -76,7 +76,7 @@ function DriverCard({ driver, index }: { driver: KeyDriver; index: number }) {
 
   return (
     <div
-      className="animate-in fade-in slide-in-from-bottom-2 duration-500 rounded-xl bg-gradient-to-br from-violet-50/60 via-white/40 to-purple-50/40 backdrop-blur-sm border border-white/40 p-4 hover:shadow-md transition-all hover:-translate-y-0.5 h-full flex flex-col"
+      className="animate-in fade-in slide-in-from-bottom-2 duration-500 rounded-xl bg-linear-to-br from-violet-50/60 via-white/40 to-purple-50/40 backdrop-blur-sm border border-white/40 p-4 hover:shadow-md transition-all hover:-translate-y-0.5 h-full flex flex-col"
       style={{ animationDelay: `${index * 80}ms`, animationFillMode: "backwards" }}
     >
       <div className="flex items-start gap-3">
@@ -105,7 +105,7 @@ function RiskCard({ text, index }: { text: string; index: number }) {
 
   return (
     <div
-      className="animate-in fade-in slide-in-from-bottom-2 duration-500 rounded-xl bg-gradient-to-br from-red-50/50 via-white/40 to-rose-50/40 backdrop-blur-sm border border-white/40 border-l-4 border-l-red-300 p-4 hover:shadow-md transition-all hover:-translate-y-0.5"
+      className="animate-in fade-in slide-in-from-bottom-2 duration-500 rounded-xl bg-linear-to-br from-red-50/50 via-white/40 to-rose-50/40 backdrop-blur-sm border border-white/40 border-l-4 border-l-red-300 p-4 hover:shadow-md transition-all hover:-translate-y-0.5"
       style={{ animationDelay: `${index * 80}ms`, animationFillMode: "backwards" }}
     >
       <div className="flex items-start gap-3">
@@ -142,7 +142,7 @@ function ContentCard({
 }) {
   return (
     <div
-      className={`animate-in fade-in slide-in-from-bottom-3 duration-500 rounded-xl bg-gradient-to-br ${gradient} backdrop-blur-sm border border-white/40 border-l-4 ${borderColor} p-5 h-full`}
+      className={`animate-in fade-in slide-in-from-bottom-3 duration-500 rounded-xl bg-linear-to-br ${gradient} backdrop-blur-sm border border-white/40 border-l-4 ${borderColor} p-5 h-full`}
     >
       <div className="flex items-center gap-3 mb-4">
         <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${iconBg} shadow-sm`}>
@@ -192,7 +192,7 @@ function TabbedExplanation({ explanation }: { explanation: ExplanationResponse }
       <TabsContent value="overview" className="mt-0 space-y-6">
         {/* Summary Card */}
         {explanation.explanation_summary && (
-          <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 rounded-xl bg-gradient-to-br from-amber-50/60 via-white/40 to-yellow-50/40 backdrop-blur-sm border border-white/40 border-l-4 border-l-amber-400 p-5">
+          <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 rounded-xl bg-linear-to-br from-amber-50/60 via-white/40 to-yellow-50/40 backdrop-blur-sm border border-white/40 border-l-4 border-l-amber-400 p-5">
             <div className="flex items-center gap-3 mb-3">
               <div className="h-10 w-10 rounded-xl flex items-center justify-center bg-amber-100/60 shadow-sm">
                 <Sparkles className="h-5 w-5 text-amber-500" />
