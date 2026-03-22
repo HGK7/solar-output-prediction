@@ -314,11 +314,29 @@ def create_app() -> Flask:
             lon = request.args.get("lon", type=float)
             model = request.args.get("model", "linear_regression")
             region = request.args.get("region", "global")
+            system_capacity_kw = request.args.get("system_capacity_kw", type=float)
+            panel_efficiency = request.args.get("panel_efficiency", type=float)
+            performance_ratio = request.args.get("performance_ratio", type=float)
+            electricity_tariff_usd = request.args.get(
+                "electricity_tariff_usd", type=float
+            )
 
             lat, lon = validate_coordinates(lat, lon)
 
             def generate():
                 try:
+                    financial_overrides = {"region": region}
+                    if system_capacity_kw is not None:
+                        financial_overrides["system_capacity_kw"] = system_capacity_kw
+                    if panel_efficiency is not None:
+                        financial_overrides["panel_efficiency"] = panel_efficiency
+                    if performance_ratio is not None:
+                        financial_overrides["performance_ratio"] = performance_ratio
+                    if electricity_tariff_usd is not None:
+                        financial_overrides["electricity_tariff_usd"] = (
+                            electricity_tariff_usd
+                        )
+
                     # Stage 1: Location data from NASA
                     yield _sse_event(
                         "stage", {"stage": "location", "status": "loading"}
@@ -334,6 +352,7 @@ def create_app() -> Flask:
                     }
 
                     yield _sse_event("location", location_payload)
+                    yield _sse_event("ping", {})
 
                     # Stage 2: ML Prediction
                     yield _sse_event(
@@ -345,6 +364,7 @@ def create_app() -> Flask:
                         pred_payload, data_source="nasa_api"
                     )
                     yield _sse_event("prediction", prediction_result)
+                    yield _sse_event("ping", {})
 
                     # Stage 3: Financial Analysis + Solar Geometry
                     yield _sse_event(
@@ -352,11 +372,17 @@ def create_app() -> Flask:
                     )
                     financial_result = financial_service.calculate(
                         predicted_irradiance_kwh_m2_day=prediction_result["prediction"],
-                        overrides={"region": region},
+                        overrides=financial_overrides,
                     )
-                    geometry_result = geometry_service.calculate(lat, lon)
+                    geometry_capacity_kw = financial_overrides.get(
+                        "system_capacity_kw", 5.0
+                    )
+                    geometry_result = geometry_service.calculate(
+                        lat, lon, system_capacity_kw=geometry_capacity_kw
+                    )
                     yield _sse_event("financial", financial_result)
                     yield _sse_event("geometry", geometry_result)
+                    yield _sse_event("ping", {})
 
                     # Stage 4: Structured JSON Explanation (non-streamed)
                     yield _sse_event(
@@ -375,6 +401,7 @@ def create_app() -> Flask:
                             "error": "Explanation unavailable — GEMINI_API_KEY not set."
                         }
                     yield _sse_event("explanation", explanation_result)
+                    yield _sse_event("ping", {})
 
                     yield _sse_event("done", {"status": "complete"})
 
