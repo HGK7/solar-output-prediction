@@ -132,7 +132,41 @@ function normalizeLocationRecord(value: unknown): SavedLocationRecord | null {
     metadata: normalizeMetadata(value.metadata),
     createdAt: typeof value.createdAt === "string" ? value.createdAt : new Date().toISOString(),
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : new Date().toISOString(),
-    latestRun: isRecord(value.latestRun) ? (value.latestRun as SavedAnalysisRun) : null,
+    latestRun: normalizeSavedRun(value.latestRun),
+  };
+}
+
+function normalizeSavedRun(value: unknown): SavedAnalysisRun | null {
+  if (!isRecord(value)) return null;
+
+  if (typeof value.id !== "string" || typeof value.createdAt !== "string") return null;
+
+  const summary = isRecord(value.summary) ? value.summary : null;
+  if (
+    !summary ||
+    typeof summary.annualOutputKwh !== "number" ||
+    typeof summary.annualSavingsUsd !== "number" ||
+    typeof summary.paybackYears !== "number" ||
+    (summary.confidence !== "low" && summary.confidence !== "medium" && summary.confidence !== "high") ||
+    typeof summary.modelUsed !== "string"
+  ) {
+    return null;
+  }
+
+  const result = isRecord(value.result) ? (value.result as unknown as AnalysisResult) : null;
+  if (!result || !isRecord(result.prediction) || !isRecord(result.financial)) return null;
+
+  return {
+    id: value.id,
+    createdAt: value.createdAt,
+    summary: {
+      annualOutputKwh: summary.annualOutputKwh,
+      annualSavingsUsd: summary.annualSavingsUsd,
+      paybackYears: summary.paybackYears,
+      confidence: summary.confidence,
+      modelUsed: summary.modelUsed,
+    },
+    result: result,
   };
 }
 
