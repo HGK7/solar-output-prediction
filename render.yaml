@@ -9,7 +9,9 @@ services:
     plan: free
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    # Explicitly bind to the port Render provides and expose health check
+    startCommand: gunicorn -w 1 -b 0.0.0.0:$PORT app:app --timeout 240
+    healthCheckPath: /health
     envVars:
       - key: GEMINI_API_KEY
         sync: false  # Set manually in Render dashboard
