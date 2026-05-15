@@ -45,9 +45,7 @@ def create_app() -> Flask:
         logger.warning("CONFIG WARNING: %s", warning)
 
     # --- Initialize ML models ---
-    logger.info("Initializing ML models …")
     model_manager = ModelManager()
-    model_manager.initialize()
 
     # --- Initialize services ---
     prediction_service = PredictionService(model_manager)

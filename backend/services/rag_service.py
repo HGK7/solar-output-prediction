@@ -3,13 +3,15 @@
 import json
 import os
 from pathlib import Path
-
-from langchain_chroma import Chroma
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_huggingface import HuggingFaceEmbeddings
+from typing import TYPE_CHECKING
 
 from config import Config
 from utils.logging import logger
+
+if TYPE_CHECKING:
+    from langchain_chroma import Chroma
+    from langchain_google_genai import ChatGoogleGenerativeAI
+    from langchain_huggingface import HuggingFaceEmbeddings
 
 _PROMPT_DIR = os.path.join(Config.BASE_DIR, "prompts")
 
@@ -27,6 +29,19 @@ class RAGService:
     def __init__(self):
         self._prompt_template: str = self._load_prompt("rag_prompt.txt")
         self._persist_dir = os.path.join(Config.BASE_DIR, "chroma_db")
+        self._embeddings = None
+        self._vectorstore = None
+        self._retriever = None
+        self._llm = None
+
+    def _ensure_ready(self) -> None:
+        if self._vectorstore is not None and self._retriever is not None:
+            return
+
+        from langchain_chroma import Chroma
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        from langchain_huggingface import HuggingFaceEmbeddings
+
         self._embeddings = HuggingFaceEmbeddings(model_name=Config.EMBEDDING_MODEL)
         self._vectorstore = Chroma(
             persist_directory=self._persist_dir,
@@ -48,6 +63,8 @@ class RAGService:
             raise RuntimeError(
                 "GEMINI_API_KEY is not configured. Set it in your .env file to enable RAG."
             )
+
+        self._ensure_ready()
 
         docs = self._retriever.invoke(question)
         if not docs:
@@ -107,6 +124,7 @@ class RAGService:
     def document_count(self) -> int:
         """Best-effort count of indexed chunks for health checks."""
         try:
+            self._ensure_ready()
             return int(self._vectorstore._collection.count())
         except Exception:
             return 0

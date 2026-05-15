@@ -3,18 +3,23 @@ Prediction service — orchestrates ML model inference.
 
 This is the ONLY path through which numeric predictions are generated.
 LLMs are never involved in this pipeline.
+
 """
 
-import numpy as np
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from config import Config
-from models.loader import ModelManager
 from utils.validation import (
     validate_prediction_input,
     validate_model_name,
     ValidationError,
 )
 from utils.logging import logger
+
+if TYPE_CHECKING:
+    from models.loader import ModelManager
 
 
 class PredictionService:
@@ -39,6 +44,8 @@ class PredictionService:
         model = self.model_manager.get_model(model_name)
 
         # --- Build feature vector (order must match training) ---
+        import numpy as np
+
         feature_vector = np.array([features[name] for name in Config.FEATURE_NAMES])
 
         # --- Predict ---

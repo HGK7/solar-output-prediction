@@ -5,14 +5,21 @@ On application startup the ModelManager:
 1. Looks for pre-trained joblib files in `trained_models/`.
 2. If none exist, trains from `cleaned_data.csv` and saves them.
 3. Exposes models via `get_model(name)`.
+
 """
 
+from __future__ import annotations
+
 import os
+import threading
+from typing import TYPE_CHECKING
 
 from config import Config
-from models.regression import LinearRegressionModel
-from models.svm import SVMModel
 from utils.logging import logger
+
+if TYPE_CHECKING:
+    from models.regression import LinearRegressionModel
+    from models.svm import SVMModel
 
 
 class ModelManager:
@@ -21,6 +28,8 @@ class ModelManager:
     def __init__(self):
         self._models: dict[str, LinearRegressionModel | SVMModel] = {}
         self._data_stats: dict | None = None
+        self._initialized = False
+        self._init_lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Public API
@@ -28,7 +37,17 @@ class ModelManager:
 
     def initialize(self) -> None:
         """Load or train all models. Call once at startup."""
+        if self._initialized:
+            return
+
+        with self._init_lock:
+            if self._initialized:
+                return
+
         os.makedirs(Config.MODEL_DIR, exist_ok=True)
+
+        from models.regression import LinearRegressionModel
+        from models.svm import SVMModel
 
         lr = LinearRegressionModel()
         svm = SVMModel()
@@ -56,10 +75,12 @@ class ModelManager:
 
         self._models["linear_regression"] = lr
         self._models["svm"] = svm
+        self._initialized = True
         logger.info("ModelManager ready — models: %s", list(self._models.keys()))
 
     def get_model(self, name: str) -> LinearRegressionModel | SVMModel:
         """Return a trained model by name."""
+        self.initialize()
         model = self._models.get(name)
         if model is None:
             raise KeyError(f"Unknown model: {name}")
