@@ -1,108 +1,115 @@
-"""
-RAG service — answers domain questions grounded in trusted documents.
-
-Uses ChromaDB (in-memory) + sentence-transformers embeddings.
-The LLM is constrained to answer ONLY from retrieved context and must
-explicitly refuse when context is insufficient.
-
-Uses the google-genai SDK (google.genai) — the current, supported SDK.
-The deprecated google-generativeai package is NOT used.
-"""
+"""RAG service powered by modern LangChain retriever + Gemini chat model."""
 
 import json
 import os
+from pathlib import Path
+
+from langchain_chroma import Chroma
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_huggingface import HuggingFaceEmbeddings
 
 from config import Config
-from rag.vectorstore import VectorStore
 from utils.logging import logger
 
 _PROMPT_DIR = os.path.join(Config.BASE_DIR, "prompts")
 
+PUBLIC_SOURCE_LINKS = {
+    "solar_fundamentals.md": "https://power.larc.nasa.gov/docs/services/api/temporal/daily/",
+    "solar_panel_efficiency.md": "https://www.nrel.gov/pv/module-performance.html",
+    "weather_impact.md": "https://www.nrel.gov/grid/solar-resource/",
+    "bhadla_solar_park.md": "https://en.wikipedia.org/wiki/Bhadla_Solar_Park",
+}
+
 
 class RAGService:
-    """Retrieval-Augmented Generation for solar-domain Q&A."""
+    """Retrieval-Augmented Generation for scientific solar Q&A."""
 
-    def __init__(self, vectorstore: VectorStore):
-        self._vectorstore = vectorstore
-        self._client = None
+    def __init__(self):
         self._prompt_template: str = self._load_prompt("rag_prompt.txt")
-
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
+        self._persist_dir = os.path.join(Config.BASE_DIR, "chroma_db")
+        self._embeddings = HuggingFaceEmbeddings(model_name=Config.EMBEDDING_MODEL)
+        self._vectorstore = Chroma(
+            persist_directory=self._persist_dir,
+            embedding_function=self._embeddings,
+            collection_name="solar_science",
+        )
+        self._retriever = self._vectorstore.as_retriever(
+            search_kwargs={"k": Config.RAG_TOP_K}
+        )
+        self._llm = ChatGoogleGenerativeAI(
+            model=Config.GEMINI_MODEL,
+            google_api_key=Config.GEMINI_API_KEY,
+            temperature=Config.LLM_TEMPERATURE,
+        )
 
     def ask(self, question: str) -> dict:
-        """
-        Answer a natural-language question using RAG.
+        """Answer a natural-language question using retrieved scientific context."""
+        if not Config.GEMINI_API_KEY:
+            raise RuntimeError(
+                "GEMINI_API_KEY is not configured. Set it in your .env file to enable RAG."
+            )
 
-        Pipeline:  question → retrieve → augment prompt → LLM → structured answer
-        """
-        # --- Retrieve ---
-        results = self._vectorstore.query(question, k=Config.RAG_TOP_K)
-        documents = results.get("documents", [[]])[0]
-        metadatas = results.get("metadatas", [[]])[0]
-
-        if not documents:
-            logger.info("No relevant documents found for: %s", question[:80])
+        docs = self._retriever.invoke(question)
+        if not docs:
+            logger.info("No relevant scientific documents found for: %s", question[:80])
             return self._refusal("insufficient_context")
 
-        # --- Build context ---
         context_parts = []
-        for i, (doc, meta) in enumerate(zip(documents, metadatas), 1):
-            source = meta.get("source", "unknown")
-            section = meta.get("section", "")
-            header = f"[Source {i}: {source}"
-            if section:
-                header += f" § {section}"
-            header += "]"
-            context_parts.append(f"{header}\n{doc}")
+        citations = []
+        retrieved_documents = []
+        for i, doc in enumerate(docs, 1):
+            metadata = doc.metadata or {}
+            source_path = metadata.get("source", "unknown")
+            source_name = Path(str(source_path)).name if source_path else "unknown"
+            page = metadata.get("page")
+            metadata_section = metadata.get("section")
+            section = (
+                f"page {page + 1}"
+                if isinstance(page, int)
+                else (str(metadata_section) if metadata_section else "")
+            )
+            source_link = PUBLIC_SOURCE_LINKS.get(source_name)
+            context_parts.append(
+                f"[Source {i}: {source_name}{f' | {section}' if section else ''}]\n{doc.page_content}"
+            )
+            citations.append(
+                {
+                    "source": source_name,
+                    "section": section,
+                    "source_path": str(source_path) if source_path else None,
+                    "link": source_link,
+                }
+            )
+            retrieved_documents.append(
+                {
+                    "source": source_name,
+                    "section": section,
+                    "source_path": str(source_path) if source_path else None,
+                    "link": source_link,
+                    "snippet": " ".join(doc.page_content.split())[:320],
+                }
+            )
 
         context_text = "\n\n---\n\n".join(context_parts)
-
-        # --- Augment & call LLM ---
-        client = self._get_client()
         prompt = self._prompt_template.format(context=context_text, question=question)
 
-        from google.genai import types
+        logger.info("RAG ask via LangChain retriever (sources=%d)", len(docs))
+        response = self._llm.invoke(prompt)
 
-        logger.info("Sending RAG query to Gemini (sources: %d) …", len(documents))
-        response = client.models.generate_content(
-            model=Config.GEMINI_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=self._system_instruction(),
-                temperature=Config.LLM_TEMPERATURE,
-                response_mime_type="application/json",
-            ),
-        )
+        parsed = self._parse_response(response.content)
+        if not parsed.get("citations") and not parsed.get("is_refusal", False):
+            parsed["citations"] = citations
+        parsed["query"] = question
+        parsed["retrieval_count"] = len(retrieved_documents)
+        parsed["retrieved_documents"] = retrieved_documents
+        return parsed
 
-        return self._parse_response(response.text)
-
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
-
-    def _get_client(self):
-        if self._client is None:
-            from google import genai
-
-            if not Config.GEMINI_API_KEY:
-                raise RuntimeError(
-                    "GEMINI_API_KEY is not configured. "
-                    "Set it in your .env file to enable RAG."
-                )
-            self._client = genai.Client(api_key=Config.GEMINI_API_KEY)
-        return self._client
-
-    @staticmethod
-    def _system_instruction() -> str:
-        return (
-            "You are a solar energy knowledge assistant embedded in a "
-            "decision-support system. You answer questions using ONLY the "
-            "provided context documents. You NEVER fabricate information. "
-            "If the context is insufficient, you must refuse clearly. "
-            "Always respond in valid JSON matching the requested schema."
-        )
+    def document_count(self) -> int:
+        """Best-effort count of indexed chunks for health checks."""
+        try:
+            return int(self._vectorstore._collection.count())
+        except Exception:
+            return 0
 
     @staticmethod
     def _load_prompt(filename: str) -> str:
@@ -114,13 +121,13 @@ class RAGService:
     def _refusal(reason: str) -> dict:
         messages = {
             "insufficient_context": (
-                "I don't have sufficient information in my knowledge base "
-                "to answer this question accurately."
+                "I don't have sufficient scientific context in the indexed PDFs "
+                "to answer this accurately."
             ),
-            "outside_scope": "This question is outside the scope of this system.",
+            "outside_scope": "This question is outside the scientific solar scope.",
             "ambiguous_question": (
-                "The question is too ambiguous to provide a reliable answer. "
-                "Please rephrase with more specifics."
+                "The question is ambiguous for a grounded scientific response. "
+                "Please provide more specific details."
             ),
         }
         return {
@@ -129,33 +136,40 @@ class RAGService:
             "confidence": "none",
             "is_refusal": True,
             "refusal_reason": reason,
+            "query": "",
+            "retrieval_count": 0,
+            "retrieved_documents": [],
         }
 
     @staticmethod
     def _parse_response(content: str) -> dict:
-        """Parse the LLM JSON response, handling markdown fences."""
         text = content.strip()
         if text.startswith("```"):
             lines = text.split("\n")
-            lines = [l for l in lines if not l.strip().startswith("```")]
+            lines = [line for line in lines if not line.strip().startswith("```")]
             text = "\n".join(lines)
 
         try:
             parsed = json.loads(text)
-            # Ensure required keys exist
             parsed.setdefault("answer", "")
             parsed.setdefault("citations", [])
             parsed.setdefault("confidence", "low")
             parsed.setdefault("is_refusal", False)
             parsed.setdefault("refusal_reason", None)
+            parsed.setdefault("query", "")
+            parsed.setdefault("retrieval_count", 0)
+            parsed.setdefault("retrieved_documents", [])
             return parsed
         except json.JSONDecodeError:
-            logger.warning("LLM returned non-JSON RAG answer; wrapping.")
+            logger.warning("RAG model returned non-JSON response; wrapping raw text.")
             return {
-                "answer": text[:1000],
+                "answer": text[:1500],
                 "citations": [],
                 "confidence": "low",
                 "is_refusal": False,
                 "refusal_reason": None,
+                "query": "",
+                "retrieval_count": 0,
+                "retrieved_documents": [],
                 "raw_response": True,
             }

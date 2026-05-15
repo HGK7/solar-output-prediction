@@ -144,7 +144,7 @@
 
 @layer base {
   html {
-    @apply h-full overflow-hidden bg-background;
+    @apply h-full overflow-x-hidden overflow-y-auto bg-background;
   }
 
   * {
@@ -152,7 +152,7 @@
   }
 
   body {
-    @apply h-full overflow-hidden bg-background text-foreground;
+    @apply h-full overflow-x-hidden overflow-y-auto bg-background text-foreground;
   }
 }
 

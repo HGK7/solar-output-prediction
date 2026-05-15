@@ -23,8 +23,8 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${inter.variable} font-sans antialiased`}>
         <BackendStatusProvider>
-          <div className="flex h-dvh flex-col overflow-hidden bg-linear-to-br from-yellow-50 via-sky-50 to-white">
-            <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+          <div className="flex h-dvh flex-col overflow-x-hidden overflow-y-auto bg-linear-to-br from-yellow-50 via-sky-50 to-white">
+            <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">{children}</div>
           </div>
         </BackendStatusProvider>
       </body>

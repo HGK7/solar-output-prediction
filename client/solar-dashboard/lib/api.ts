@@ -65,6 +65,8 @@ export function streamPlan(
     panel_efficiency?: number;
     performance_ratio?: number;
     electricity_tariff_usd?: number;
+    panel_technology?: string;
+    installation_type?: string;
   },
 ): { cancel: () => void } {
   const params = new URLSearchParams({
@@ -86,14 +88,34 @@ export function streamPlan(
   if (options?.electricity_tariff_usd !== undefined) {
     params.set("electricity_tariff_usd", String(options.electricity_tariff_usd));
   }
+  if (options?.panel_technology !== undefined) {
+    params.set("panel_technology", String(options.panel_technology));
+  }
+  if (options?.installation_type !== undefined) {
+    params.set("installation_type", String(options.installation_type));
+  }
 
   const controller = new AbortController();
 
   (async () => {
     try {
+      // Debug helpers: keep a short in-browser ring buffer of raw SSE lines
+      try {
+        (window as any).__sseDebugLogs = (window as any).__sseDebugLogs || [];
+      } catch { }
+
+      try {
+        (window as any).__lastStreamEvent = (window as any).__lastStreamEvent || null;
+      } catch { }
+
       const res = await fetch(`${API_BASE}/stream-plan?${params}`, {
         signal: controller.signal,
       });
+
+      try {
+        (window as any).__sseDebugLogs.push({ type: "fetch", url: `${API_BASE}/stream-plan?${params}`, ok: res.ok, status: res.status });
+        if ((window as any).__sseDebugLogs.length > 200) (window as any).__sseDebugLogs.shift();
+      } catch { }
 
       if (!res.ok || !res.body) {
         onEvent("error", { error: "Failed to start streaming analysis." });
@@ -114,6 +136,13 @@ export function streamPlan(
 
         let currentEvent = "message";
         for (const line of lines) {
+          try {
+            // store raw incoming line for debugging
+            try {
+              (window as any).__sseDebugLogs.push({ ts: Date.now(), line });
+              if ((window as any).__sseDebugLogs.length > 500) (window as any).__sseDebugLogs.shift();
+            } catch { }
+          } catch { }
           if (line.startsWith("event: ")) {
             currentEvent = line.slice(7).trim();
           } else if (line.startsWith("data: ")) {
@@ -122,6 +151,9 @@ export function streamPlan(
               if (currentEvent === "ping") {
                 continue;
               }
+              try {
+                (window as any).__lastStreamEvent = { event: currentEvent, data };
+              } catch { }
               onEvent(currentEvent, data);
             } catch {
               // Skip malformed data lines

@@ -1,353 +1,281 @@
 "use client";
 
-import React, { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  BrainCircuit,
-  ShieldAlert,
-  Lightbulb,
-  Sparkles,
-  TrendingUp,
-  AlertTriangle,
-  Zap,
-  Wind,
-  Sun,
-  Thermometer,
-  Droplets,
-  CloudSun,
-  type LucideIcon,
-} from "lucide-react";
-import type { ExplanationResponse, KeyDriver } from "@/types";
-
-/* ─── Value Highlighting ────────────────────────────────── */
-
-const VALUE_RE =
-  /(\$[\d,]+\.?\d*|\d[\d,]*\.?\d*\s*(?:kWh\/m²\/day|kWh\/m²|kWh|kWp|kW|Wp|W\/m²|°C|%|years?|months?|hours?|hrs?))/g;
-
-function highlightValues(text: string): React.ReactNode[] {
-  const out: React.ReactNode[] = [];
-  let last = 0;
-  const re = new RegExp(VALUE_RE.source, "g");
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    if (m.index > last) out.push(text.slice(last, m.index));
-    out.push(
-      <span
-        key={`v${m.index}`}
-        className="font-semibold text-amber-700 bg-amber-100/60 px-1 rounded-sm"
-      >
-        {m[0]}
-      </span>,
-    );
-    last = m.index + m[0].length;
-  }
-  if (last < text.length) out.push(text.slice(last));
-  return out.length ? out : [text];
-}
-
-/* ─── Driver Icon Mapping ───────────────────────────────── */
-
-const DRIVER_ICONS: Record<string, { Icon: LucideIcon; color: string; bg: string }> = {
-  "clear sky": { Icon: Sun, color: "text-amber-500", bg: "bg-amber-100/60" },
-  irradiance: { Icon: Sun, color: "text-amber-500", bg: "bg-amber-100/60" },
-  solar: { Icon: Sun, color: "text-amber-500", bg: "bg-amber-100/60" },
-  temperature: { Icon: Thermometer, color: "text-red-500", bg: "bg-red-100/60" },
-  wind: { Icon: Wind, color: "text-sky-500", bg: "bg-sky-100/60" },
-  humidity: { Icon: Droplets, color: "text-blue-500", bg: "bg-blue-100/60" },
-  cloud: { Icon: CloudSun, color: "text-slate-500", bg: "bg-slate-100/60" },
-  weather: { Icon: CloudSun, color: "text-slate-500", bg: "bg-slate-100/60" },
-};
-
-function getDriverIcon(feature: string): { Icon: LucideIcon; color: string; bg: string } {
-  const lower = feature.toLowerCase();
-  for (const [key, val] of Object.entries(DRIVER_ICONS)) {
-    if (lower.includes(key)) return val;
-  }
-  return { Icon: Zap, color: "text-violet-500", bg: "bg-violet-100/60" };
-}
-
-/* ─── Mini Card Components ──────────────────────────────── */
-
-function DriverCard({ driver, index }: { driver: KeyDriver; index: number }) {
-  const { Icon, color, bg } = getDriverIcon(driver.feature);
-
-  return (
-    <div
-      className="animate-in fade-in slide-in-from-bottom-2 duration-500 rounded-xl bg-linear-to-br from-violet-50/60 via-white/40 to-purple-50/40 backdrop-blur-sm border border-white/40 p-4 hover:shadow-md transition-all hover:-translate-y-0.5 h-full flex flex-col"
-      style={{ animationDelay: `${index * 80}ms`, animationFillMode: "backwards" }}
-    >
-      <div className="flex items-start gap-3">
-        <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${bg} shadow-sm shrink-0`}>
-          <Icon className={`h-5 w-5 ${color}`} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h5 className="text-sm font-semibold text-foreground mb-1">{driver.feature}</h5>
-          <p className="text-xs text-muted-foreground mb-1">
-            {driver.value} {driver.unit}
-          </p>
-          <p className="text-sm text-foreground/70 leading-relaxed">
-            {highlightValues(driver.impact)}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function RiskCard({ text, index }: { text: string; index: number }) {
-  // Extract bold term if present, otherwise use first phrase
-  const boldMatch = text.match(/\*\*([^*]+)\*\*/);
-  const title = boldMatch ? boldMatch[1] : text.split(/[:.]/)[0].slice(0, 30);
-  const description = text.replace(/\*\*[^*]+\*\*:?\s*/, "").trim();
-
-  return (
-    <div
-      className="animate-in fade-in slide-in-from-bottom-2 duration-500 rounded-xl bg-linear-to-br from-red-50/50 via-white/40 to-rose-50/40 backdrop-blur-sm border border-white/40 border-l-4 border-l-red-300 p-4 hover:shadow-md transition-all hover:-translate-y-0.5"
-      style={{ animationDelay: `${index * 80}ms`, animationFillMode: "backwards" }}
-    >
-      <div className="flex items-start gap-3">
-        <div className="h-8 w-8 rounded-lg flex items-center justify-center bg-red-100/60 shadow-sm shrink-0 mt-0.5">
-          <ShieldAlert className="h-4 w-4 text-red-400" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h5 className="text-sm font-semibold text-foreground mb-1">{title}</h5>
-          <p className="text-sm text-foreground/70 leading-relaxed">
-            {highlightValues(description)}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ContentCard({
-  title,
-  content,
-  Icon,
-  iconColor,
-  iconBg,
-  gradient,
-  borderColor,
-}: {
-  title: string;
-  content: string;
-  Icon: LucideIcon;
-  iconColor: string;
-  iconBg: string;
-  gradient: string;
-  borderColor: string;
-}) {
-  return (
-    <div
-      className={`animate-in fade-in slide-in-from-bottom-3 duration-500 rounded-xl bg-linear-to-br ${gradient} backdrop-blur-sm border border-white/40 border-l-4 ${borderColor} p-5 h-full`}
-    >
-      <div className="flex items-center gap-3 mb-4">
-        <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${iconBg} shadow-sm`}>
-          <Icon className={`h-5 w-5 ${iconColor}`} />
-        </div>
-        <h4 className="text-base font-semibold text-foreground">{title}</h4>
-      </div>
-      <p className="text-[15px] text-foreground/80 leading-relaxed">
-        {highlightValues(content)}
-      </p>
-    </div>
-  );
-}
-
-/* ─── Tabbed Content Layout ─────────────────────────────── */
-
-function TabbedExplanation({ explanation }: { explanation: ExplanationResponse }) {
-  const [activeTab, setActiveTab] = useState("overview");
-
-  return (
-    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-      <TabsList className="grid w-full grid-cols-3 mb-6 bg-white/60 backdrop-blur-sm border border-white/40 rounded-xl p-1">
-        <TabsTrigger
-          value="overview"
-          className="data-[state=active]:bg-amber-100/80 data-[state=active]:text-amber-700 rounded-lg text-sm font-medium transition-all"
-        >
-          <Sparkles className="h-4 w-4 mr-2" />
-          Overview
-        </TabsTrigger>
-        <TabsTrigger
-          value="analysis"
-          className="data-[state=active]:bg-sky-100/80 data-[state=active]:text-sky-700 rounded-lg text-sm font-medium transition-all"
-        >
-          <Zap className="h-4 w-4 mr-2" />
-          Analysis
-        </TabsTrigger>
-        <TabsTrigger
-          value="risks"
-          className="data-[state=active]:bg-red-100/80 data-[state=active]:text-red-700 rounded-lg text-sm font-medium transition-all"
-        >
-          <ShieldAlert className="h-4 w-4 mr-2" />
-          Risks
-        </TabsTrigger>
-      </TabsList>
-
-      {/* ─── Overview Tab ─── */}
-      <TabsContent value="overview" className="mt-0 space-y-6">
-        {/* Summary Card */}
-        {explanation.explanation_summary && (
-          <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 rounded-xl bg-linear-to-br from-amber-50/60 via-white/40 to-yellow-50/40 backdrop-blur-sm border border-white/40 border-l-4 border-l-amber-400 p-5">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="h-10 w-10 rounded-xl flex items-center justify-center bg-amber-100/60 shadow-sm">
-                <Sparkles className="h-5 w-5 text-amber-500" />
-              </div>
-              <h4 className="text-base font-semibold text-foreground">Summary</h4>
-            </div>
-            <p className="text-[15px] text-foreground/80 leading-relaxed">
-              {highlightValues(explanation.explanation_summary)}
-            </p>
-          </div>
-        )}
-
-        {/* Key Drivers Grid */}
-        {explanation.key_drivers && explanation.key_drivers.length > 0 && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Lightbulb className="h-5 w-5 text-violet-500" />
-              <h4 className="text-base font-semibold text-foreground">Key Drivers</h4>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {explanation.key_drivers.slice(0, 4).map((driver, i) => (
-                <DriverCard key={i} driver={driver} index={i} />
-              ))}
-            </div>
-          </div>
-        )}
-      </TabsContent>
-
-      {/* ─── Analysis Tab ─── */}
-      <TabsContent value="analysis" className="mt-0">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          {explanation.physical_interpretation && (
-            <ContentCard
-              title="Physical Interpretation"
-              content={explanation.physical_interpretation}
-              Icon={Zap}
-              iconColor="text-sky-500"
-              iconBg="bg-sky-100/60"
-              gradient="from-sky-50/60 via-white/40 to-blue-50/40"
-              borderColor="border-l-sky-400"
-            />
-          )}
-          {explanation.financial_insight && (
-            <ContentCard
-              title="Financial Outlook"
-              content={explanation.financial_insight}
-              Icon={TrendingUp}
-              iconColor="text-emerald-500"
-              iconBg="bg-emerald-100/60"
-              gradient="from-emerald-50/60 via-white/40 to-green-50/40"
-              borderColor="border-l-emerald-400"
-            />
-          )}
-        </div>
-        {!explanation.physical_interpretation && !explanation.financial_insight && (
-          <div className="text-center text-muted-foreground py-8">
-            Analysis data will appear here once available.
-          </div>
-        )}
-      </TabsContent>
-
-      {/* ─── Risks Tab ─── */}
-      <TabsContent value="risks" className="mt-0 space-y-6">
-        {/* Uncertainty Card */}
-        {explanation.uncertainty_notes && (
-          <ContentCard
-            title="Uncertainty & Caveats"
-            content={explanation.uncertainty_notes}
-            Icon={AlertTriangle}
-            iconColor="text-orange-500"
-            iconBg="bg-orange-100/60"
-            gradient="from-orange-50/50 via-white/40 to-amber-50/40"
-            borderColor="border-l-orange-400"
-          />
-        )}
-
-        {/* Risk Factors Grid */}
-        {explanation.risk_factors && explanation.risk_factors.length > 0 && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <ShieldAlert className="h-5 w-5 text-red-400" />
-              <h4 className="text-base font-semibold text-foreground">Risk Factors</h4>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {explanation.risk_factors.slice(0, 4).map((risk, i) => (
-                <RiskCard key={i} text={risk} index={i} />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {!explanation.uncertainty_notes && (!explanation.risk_factors || explanation.risk_factors.length === 0) && (
-          <div className="text-center text-muted-foreground py-8">
-            Risk information will appear here once available.
-          </div>
-        )}
-      </TabsContent>
-    </Tabs>
-  );
-}
-
-/* ─── Main Export ────────────────────────────────────────── */
+import { BrainCircuit, AlertTriangle, BookOpen, Sparkles, Calculator, Link as LinkIcon } from "lucide-react";
+import type { ExplanationResponse } from "@/types";
 
 interface ExplanationPanelProps {
   explanation: ExplanationResponse | null;
   isLoading: boolean;
 }
 
-export function ExplanationPanel({
-  explanation,
-  isLoading,
-}: ExplanationPanelProps) {
-  /* Loading skeleton */
+export function ExplanationPanel({ explanation, isLoading }: ExplanationPanelProps) {
   if (isLoading) {
     return (
-      <Card className="bg-white/70 backdrop-blur-md border-white/40 shadow-md shadow-yellow-100/40">
+      <Card className="glass-card">
         <CardHeader>
-          <Skeleton className="h-6 w-48" />
+          <Skeleton className="h-6 w-52" />
         </CardHeader>
         <CardContent className="space-y-3">
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-4 w-5/6" />
           <Skeleton className="h-4 w-4/6" />
-          <Skeleton className="h-4 w-full" />
         </CardContent>
       </Card>
     );
   }
 
-  /* No explanation or error */
   if (!explanation || explanation.error) return null;
 
-  const badgeClass = {
-    low: "bg-red-50 text-red-600 border-red-200",
-    medium: "bg-amber-50 text-amber-600 border-amber-200",
-    high: "bg-green-50 text-green-600 border-green-200",
-  };
+  const confidenceBadgeClass =
+    explanation.confidence_assessment === "high"
+      ? "bg-green-50 text-green-700 border-green-200"
+      : explanation.confidence_assessment === "low"
+        ? "bg-red-50 text-red-700 border-red-200"
+        : "bg-amber-50 text-amber-700 border-amber-200";
+
+  const keyDrivers = explanation.key_drivers?.slice(0, 3) ?? [];
+  const risks = explanation.risk_factors?.slice(0, 3) ?? [];
+  const citations = explanation.citations?.slice(0, 4) ?? [];
+  const calculations = explanation.calculation_trace?.slice(0, 3) ?? [];
+  const methodology = explanation.methodology_trace ?? [];
+  const inputTrace = explanation.input_trace ?? [];
+  const assumptions = explanation.assumptions_used ?? [];
+  const ragPipeline = explanation.rag_pipeline;
 
   return (
-    <Card className="bg-white/70 backdrop-blur-md border-white/40 shadow-md shadow-yellow-100/40">
-      <CardHeader className="flex flex-row items-center justify-between pb-4">
+    <Card className="glass-card border-sky-200/50 bg-linear-to-br from-sky-50/35 via-white/90 to-amber-50/35">
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="text-lg font-semibold flex items-center gap-2">
-          <BrainCircuit className="h-5 w-5 text-purple-500" />
-          AI Explanation
+          <BrainCircuit className="h-5 w-5 text-violet-500" />
+          Explanation
         </CardTitle>
-        <Badge
-          variant="outline"
-          className={`text-sm ${badgeClass[explanation.confidence_assessment] ?? badgeClass.medium}`}
-        >
-          {explanation.confidence_assessment ?? "medium"} confidence
+        <Badge variant="outline" className={confidenceBadgeClass}>
+          {explanation.confidence_assessment} confidence
         </Badge>
       </CardHeader>
-      <CardContent>
-        <TabbedExplanation explanation={explanation} />
+
+      <CardContent className="space-y-4">
+        <Tabs defaultValue="summary" className="w-full">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="summary">Summary</TabsTrigger>
+            <TabsTrigger value="trace">Steps</TabsTrigger>
+            <TabsTrigger value="evidence">Sources</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="summary" className="space-y-4">
+            <div className="rounded-xl border border-amber-100/70 bg-white/80 p-4">
+              <p className="text-xs font-medium text-muted-foreground mb-1 inline-flex items-center gap-1">
+                <Sparkles className="h-3.5 w-3.5" /> Executive summary
+              </p>
+              <p className="text-base text-foreground/85 leading-relaxed">{explanation.explanation_summary}</p>
+            </div>
+
+            <Separator className="bg-amber-100/80" />
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <ReportBlock title="Physical interpretation" content={explanation.physical_interpretation} />
+              <ReportBlock title="Financial insight" content={explanation.financial_insight ?? "Insufficient information"} />
+            </div>
+
+            {keyDrivers.length > 0 && (
+              <div className="rounded-xl border border-sky-100/70 bg-white/80 p-3 space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Key drivers</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {keyDrivers.map((driver, index) => (
+                    <div
+                      key={`${driver.feature}-${index}`}
+                      className="rounded-lg border border-white/60 bg-white/70 px-2.5 py-2"
+                    >
+                      <p className="text-xs text-muted-foreground truncate">{driver.feature}</p>
+                      <p className="text-base font-semibold">{driver.value} {driver.unit}</p>
+                      <p className="text-sm text-foreground/75 line-clamp-2">{driver.impact}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <Separator className="bg-sky-100/80" />
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <ReportBlock title="Uncertainty" content={explanation.uncertainty_notes || "Insufficient information"} />
+              <div className="rounded-xl border border-red-100/70 bg-white/80 p-3">
+                <p className="text-xs font-medium text-muted-foreground mb-2 inline-flex items-center gap-1">
+                  <AlertTriangle className="h-3.5 w-3.5" /> Top risks
+                </p>
+                {risks.length > 0 ? (
+                  <ul className="space-y-1.5 text-sm text-foreground/80">
+                    {risks.map((risk, idx) => (
+                      <li key={`risk-${idx}`}>- {risk}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No major risk factors reported.</p>
+                )}
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="trace" className="space-y-4">
+            {methodology.length > 0 ? (
+              <div className="rounded-xl border border-amber-100/70 bg-white/80 p-3 space-y-2">
+                <p className="text-sm font-medium text-muted-foreground">How this was calculated</p>
+                <div className="space-y-2">
+                  {methodology.map((item, index) => (
+                    <div key={`${item.step}-${index}`} className="rounded-lg border border-white/60 bg-white/70 px-3 py-2">
+                      <p className="text-sm font-semibold text-foreground">{item.step}</p>
+                      <p className="text-xs text-muted-foreground">{item.how}</p>
+                      <p className="text-xs text-muted-foreground">{item.why}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <ReportBlock title="How this was calculated" content="No step-by-step details reported." />
+            )}
+
+            {inputTrace.length > 0 && (
+              <div className="rounded-xl border border-sky-100/70 bg-white/80 p-3 space-y-2">
+                <p className="text-sm font-medium text-muted-foreground">Inputs used</p>
+                <div className="grid grid-cols-1 gap-2">
+                  {inputTrace.slice(0, 6).map((item, index) => (
+                    <div key={`${item.name}-${index}`} className="rounded-lg border border-white/60 bg-white/70 px-3 py-2">
+                      <p className="text-sm font-semibold text-foreground">{item.name}</p>
+                      <p className="text-xs text-muted-foreground">{item.value} - {item.source}</p>
+                      <p className="text-xs text-muted-foreground">{item.impact}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {calculations.length > 0 && (
+              <div className="rounded-xl border border-violet-100/70 bg-white/80 p-3 space-y-2">
+                <p className="text-sm font-medium text-muted-foreground inline-flex items-center gap-1.5">
+                  <Calculator className="h-4 w-4" /> Key calculations
+                </p>
+                <div className="space-y-2">
+                  {calculations.map((calc, index) => (
+                    <div key={`${calc.step}-${index}`} className="rounded-lg border border-white/60 bg-white/70 px-3 py-2">
+                      <p className="text-sm font-semibold text-foreground">{calc.step}</p>
+                      <p className="text-sm text-foreground/80">{calc.result}</p>
+                      {calc.formula && <p className="text-xs text-muted-foreground">{calc.formula}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {assumptions.length > 0 && (
+              <div className="rounded-xl border border-amber-100/70 bg-white/80 p-3">
+                <p className="text-sm font-medium text-muted-foreground">Assumptions</p>
+                <ul className="mt-2 space-y-1 text-sm text-foreground/80">
+                  {assumptions.slice(0, 5).map((item, index) => (
+                    <li key={`${item}-${index}`}>- {item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="evidence" className="space-y-4">
+            {explanation.grounded_context && (
+              <div className="rounded-xl border border-sky-100/70 bg-white/80 p-3 space-y-1.5">
+                <p className="text-sm font-medium text-muted-foreground inline-flex items-center gap-1.5">
+                  <BookOpen className="h-3.5 w-3.5" /> Background
+                </p>
+                <p className="text-base text-foreground/80 leading-relaxed">{explanation.grounded_context}</p>
+              </div>
+            )}
+
+            {ragPipeline && (
+              <div className="rounded-xl border border-blue-100/70 bg-white/80 p-3 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-muted-foreground">Sources used</p>
+                  <Badge variant="outline" className="text-xs">
+                    {ragPipeline.retrieval_count} sources
+                  </Badge>
+                </div>
+
+                {ragPipeline.query && (
+                  <div className="rounded-lg border border-white/60 bg-white/70 px-3 py-2">
+                    <p className="text-xs text-muted-foreground">Search phrase</p>
+                    <p className="text-sm text-foreground/85 leading-relaxed">{ragPipeline.query}</p>
+                  </div>
+                )}
+
+                {ragPipeline.retrieved_documents?.length > 0 && (
+                  <div className="grid grid-cols-1 gap-2">
+                    {ragPipeline.retrieved_documents.slice(0, 3).map((doc, idx) => (
+                      <div key={`${doc.source}-${idx}`} className="rounded-lg border border-white/60 bg-white/70 px-3 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-semibold text-foreground">{doc.source}</p>
+                          {doc.link && (
+                            <a
+                              href={doc.link}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-xs text-sky-700 inline-flex items-center gap-1 hover:underline"
+                            >
+                              <LinkIcon className="h-3.5 w-3.5" /> Source
+                            </a>
+                          )}
+                        </div>
+                        {doc.section && <p className="text-xs text-muted-foreground">{doc.section}</p>}
+                        <p className="text-sm text-foreground/80 leading-relaxed mt-1">{doc.snippet}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {citations.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {citations.map((citation, index) => (
+                  citation.link ? (
+                    <a
+                      key={`${citation.source}-${citation.section ?? ""}-${index}`}
+                      href={citation.link}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex"
+                    >
+                      <Badge variant="outline" className="text-xs hover:bg-sky-50">
+                        {citation.source}
+                        {citation.section ? ` (${citation.section})` : ""}
+                      </Badge>
+                    </a>
+                  ) : (
+                    <Badge
+                      key={`${citation.source}-${citation.section ?? ""}-${index}`}
+                      variant="outline"
+                      className="text-xs"
+                    >
+                      {citation.source}
+                      {citation.section ? ` (${citation.section})` : ""}
+                    </Badge>
+                  )
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </CardContent>
     </Card>
+  );
+}
+
+function ReportBlock({ title, content }: { title: string; content: string }) {
+  return (
+    <div className="rounded-xl border border-white/45 bg-linear-to-br from-white/85 to-sky-50/30 p-3">
+      <p className="text-sm font-medium text-muted-foreground mb-1">{title}</p>
+      <p className="text-base text-foreground/80 leading-relaxed">{content}</p>
+    </div>
   );
 }

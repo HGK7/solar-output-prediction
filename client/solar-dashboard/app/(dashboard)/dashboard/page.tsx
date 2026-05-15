@@ -1,29 +1,29 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Sun, MapPin, Loader2, ChartNoAxesColumn } from "lucide-react";
-import { CoordinateInput } from "@/components/coordinate-input";
-import { PredictionCard } from "@/components/prediction-card";
-import { FinancialCard } from "@/components/financial-card";
-import { ExplanationPanel } from "@/components/explanation-panel";
-import { OutputChart } from "@/components/output-chart";
-import { SystemConfigPanel, type SystemConfig } from "@/components/system-config-panel";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Loader2 } from "lucide-react";
 import { Chatbot } from "@/components/chatbot";
+import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import { SetupView } from "@/components/dashboard/setup-view";
+import { PipelineView } from "@/components/dashboard/pipeline-view";
+import { ResultsView } from "@/components/dashboard/results-view";
 import { streamPlan, analyze } from "@/lib/api";
 import { useBackendStatusContext } from "@/lib/backend-status-context";
-import type {
-  PredictionResult,
-  FinancialSummary,
-  ExplanationResponse,
-  MonthlyData,
-  GeometryResult,
-  DataProvenance,
-} from "@/types";
+import { useDashboardWorkspace } from "@/lib/dashboard-workspace-context";
+import { useWorkspace } from "@/lib/workspace-context";
+import { useStreamingAnalysis } from "@/lib/use-streaming-analysis";
+import { createSavedRunFromAnalysis, useLocationsStore } from "@/lib/locations-store";
+import type { AnalysisResult } from "@/types";
 
 const LocationMap = dynamic(
   () => import("@/components/location-map").then((m) => m.LocationMap),
@@ -37,394 +37,494 @@ const LocationMap = dynamic(
   },
 );
 
-type LoadingStage =
-  | "idle"
-  | "location"
-  | "prediction"
-  | "financial"
-  | "explanation"
-  | "complete"
-  | "error";
-
 const PANEL_EFFICIENCY_MAP = {
   monocrystalline: 0.2,
   polycrystalline: 0.17,
   "thin-film": 0.11,
 } as const;
 
-const REQUIRED_STREAM_EVENTS = [
-  "location",
-  "prediction",
-  "financial",
-  "geometry",
-  "explanation",
-] as const;
+const STAGE_LABELS: Record<string, string> = {
+  idle: "Ready",
+  location: "Data check",
+  prediction: "Energy estimate",
+  physics: "Engineering check",
+  financial: "Cost & savings",
+  explanation: "Explanation",
+  complete: "Complete",
+  error: "Error",
+};
 
 export default function DashboardPage() {
+  const router = useRouter();
   const { markDisconnected } = useBackendStatusContext();
+  const dashboardWorkspace = useDashboardWorkspace();
+  const workspace = useWorkspace();
+  const analysis = useStreamingAnalysis();
+  const { createLocation, upsertLocation, attachRun, locations } = useLocationsStore();
+  const [view, setView] = useState<"setup" | "pipeline" | "results">("setup");
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [saveName, setSaveName] = useState("");
+  const [pipelineStage, setPipelineStage] = useState(analysis.state.stage);
+  const [showDisclaimer, setShowDisclaimer] = useState(false);
+  const [dismissDisclaimer, setDismissDisclaimer] = useState(false);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
+  const [hasSavedAnalysis, setHasSavedAnalysis] = useState(false);
 
-  const [lat, setLat] = useState(27.5);
-  const [lon, setLon] = useState(71.6);
+  // Derived state
+  const isLoading = analysis.state.stage !== "idle" && analysis.state.stage !== "complete" && analysis.state.stage !== "error";
 
-  const [prediction, setPrediction] = useState<PredictionResult | null>(null);
-  const [financial, setFinancial] = useState<FinancialSummary | null>(null);
-  const [explanation, setExplanation] = useState<ExplanationResponse | null>(null);
-  const [monthly, setMonthly] = useState<Record<string, MonthlyData> | null>(null);
-  const [geometry, setGeometry] = useState<GeometryResult | null>(null);
-  const [dataProvenance, setDataProvenance] = useState<DataProvenance | null>(null);
-  const [annualAverages, setAnnualAverages] = useState<Record<string, number> | null>(null);
+  // Financial overrides
+  const getFinancialOverrides = useCallback(() => ({
+    region: workspace.state.systemConfig.region,
+    system_capacity_kw: workspace.state.systemConfig.systemCapacityKw,
+    panel_efficiency: PANEL_EFFICIENCY_MAP[workspace.state.systemConfig.panelTechnology],
+    performance_ratio: workspace.state.systemConfig.performanceRatio,
+    electricity_tariff_usd: workspace.state.systemConfig.electricityTariffUsd,
+    installation_type: workspace.state.systemConfig.installationType,
+    grid_connection: workspace.state.systemConfig.gridConnection,
+    panel_technology: workspace.state.systemConfig.panelTechnology,
+  }), [workspace.state.systemConfig]);
 
-  const [systemConfig, setSystemConfig] = useState<SystemConfig>({
-    installationType: "rooftop",
-    panelTechnology: "monocrystalline",
-    gridConnection: "grid-tied",
-    region: "global",
-    systemCapacityKw: 5,
-    electricityTariffUsd: 0.12,
-    performanceRatio: 0.78,
-  });
-
-  const [stage, setStage] = useState<LoadingStage>("idle");
-  const [error, setError] = useState<string | null>(null);
-  const cancelRef = useRef<(() => void) | null>(null);
-  const streamWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const receivedEventsRef = useRef<Set<string>>(new Set());
-  const fallbackInProgressRef = useRef(false);
-
-  const isLoading = stage !== "idle" && stage !== "complete" && stage !== "error";
-
-  const clearWatchdog = useCallback(() => {
-    if (streamWatchdogRef.current) {
-      clearTimeout(streamWatchdogRef.current);
-      streamWatchdogRef.current = null;
+  useEffect(() => {
+    if (analysis.state.stage !== "idle") {
+      setPipelineStage(analysis.state.stage);
+      return;
     }
-  }, []);
+    if (view === "setup") {
+      setPipelineStage("idle");
+    }
+  }, [analysis.state.stage, view]);
 
-  const resetResultState = useCallback(() => {
-    setPrediction(null);
-    setFinancial(null);
-    setExplanation(null);
-    setMonthly(null);
-    setGeometry(null);
-    setDataProvenance(null);
-    setAnnualAverages(null);
-    setError(null);
-  }, []);
+  // Fallback POST /analyze handler
+  const handleStreamFailure = useCallback(async () => {
+    try {
+      const result = await analyze({
+        lat: workspace.state.lat,
+        lon: workspace.state.lon,
+        financial_overrides: getFinancialOverrides(),
+      });
 
-  const buildFinancialOverrides = useCallback(
-    () => ({
-      region: systemConfig.region,
-      system_capacity_kw: systemConfig.systemCapacityKw,
-      panel_efficiency: PANEL_EFFICIENCY_MAP[systemConfig.panelTechnology],
-      performance_ratio: systemConfig.performanceRatio,
-      electricity_tariff_usd: systemConfig.electricityTariffUsd,
-      installation_type: systemConfig.installationType,
-      grid_connection: systemConfig.gridConnection,
-      panel_technology: systemConfig.panelTechnology,
-    }),
-    [systemConfig],
-  );
-
-  const recoverWithAnalyze = useCallback(
-    async (reason: string) => {
-      if (fallbackInProgressRef.current) return;
-      fallbackInProgressRef.current = true;
-      clearWatchdog();
-
-      try {
-        const result = await analyze({
-          lat,
-          lon,
-          financial_overrides: buildFinancialOverrides(),
-        });
-
-        setPrediction(result.prediction);
-        setFinancial(result.financial);
-        setExplanation(result.explanation);
-        if (result.monthly) setMonthly(result.monthly);
-        if (result.geometry) setGeometry(result.geometry);
-        if (result.data_provenance) setDataProvenance(result.data_provenance);
-        if ((result as { annual_averages?: Record<string, number> }).annual_averages) {
-          setAnnualAverages(
-            (result as { annual_averages?: Record<string, number> }).annual_averages ?? null,
-          );
-        }
-        setStage("complete");
-        setError(null);
-      } catch (err) {
-        setError((err as Error).message);
-        setStage("error");
-        markDisconnected();
-      } finally {
-        fallbackInProgressRef.current = false;
+      if (!result) {
+        analysis.setStreamError("Analysis returned no data");
+        return;
       }
-    },
-    [buildFinancialOverrides, clearWatchdog, lat, lon, markDisconnected],
-  );
 
-  const armWatchdog = useCallback(() => {
-    clearWatchdog();
-    streamWatchdogRef.current = setTimeout(() => {
-      void recoverWithAnalyze("Stream timeout (45s without events)");
-    }, 45_000);
-  }, [clearWatchdog, recoverWithAnalyze]);
+      // Update all results
+      analysis.handleDataEvent("location", {
+        monthly: result.monthly,
+        data_provenance: result.data_provenance,
+      });
+      analysis.handleDataEvent("prediction", result.prediction);
+      analysis.handleDataEvent("physics", result.physics_simulation);
+      analysis.handleDataEvent("financial", result.financial);
+      analysis.handleDataEvent("geometry", result.geometry);
+      analysis.handleDataEvent("explanation", result.explanation);
 
+      // Complete immediately
+      analysis.completeAnalysis();
+    } catch (err) {
+      analysis.setStreamError((err as Error).message || "Analysis failed");
+      markDisconnected();
+    }
+  }, [workspace.state.lat, workspace.state.lon, getFinancialOverrides, analysis, markDisconnected]);
+
+  // Main analysis trigger
   const handleAnalyze = useCallback(() => {
-    resetResultState();
-    setStage("location");
-    receivedEventsRef.current = new Set();
-    fallbackInProgressRef.current = false;
-    armWatchdog();
+    setView("pipeline");
+    setSaveDialogOpen(false);
+    setSaveName("");
+    setHasSavedAnalysis(false);
+    if (workspace.state.saveStatus) workspace.setSaveStatus(null);
+    analysis.startAnalysis();
 
     const { cancel } = streamPlan(
-      lat,
-      lon,
+      workspace.state.lat,
+      workspace.state.lon,
       (event, data) => {
-        armWatchdog();
+        // Stage events trigger watchdog rearm
+        if (event === "stage") {
+          analysis.armWatchdog(45_000, handleStreamFailure);
+          analysis.handleStageEvent(
+            data.stage as Parameters<typeof analysis.handleStageEvent>[0],
+            Array.isArray(data.documents) ? data.documents : [],
+          );
+          return;
+        }
 
-        switch (event) {
-          case "stage":
-            setStage(data.stage as LoadingStage);
-            break;
-          case "location":
-            receivedEventsRef.current.add("location");
-            setMonthly(data.monthly as Record<string, MonthlyData>);
-            if (data.annual_averages && typeof data.annual_averages === "object") {
-              setAnnualAverages(data.annual_averages as Record<string, number>);
-            }
-            if (data.data_provenance) {
-              setDataProvenance(data.data_provenance as DataProvenance);
-            }
-            break;
-          case "prediction":
-            receivedEventsRef.current.add("prediction");
-            setPrediction(data as unknown as PredictionResult);
-            break;
-          case "financial":
-            receivedEventsRef.current.add("financial");
-            setFinancial(data as unknown as FinancialSummary);
-            break;
-          case "geometry":
-            receivedEventsRef.current.add("geometry");
-            setGeometry(data as unknown as GeometryResult);
-            break;
-          case "explanation":
-            receivedEventsRef.current.add("explanation");
-            setExplanation(data as unknown as ExplanationResponse);
-            break;
-          case "done":
-            clearWatchdog();
-            if (
-              REQUIRED_STREAM_EVENTS.every((requiredEvent) =>
-                receivedEventsRef.current.has(requiredEvent),
-              )
-            ) {
-              setStage("complete");
-            } else {
-              void recoverWithAnalyze("Stream completed with missing sections");
-            }
-            break;
-          case "error":
-            clearWatchdog();
-            markDisconnected();
-            void recoverWithAnalyze((data.error as string) ?? "Stream error");
-            break;
+        // Stream completion
+        if (event === "done") {
+          analysis.completeAnalysis();
+          return;
+        }
+
+        // Stream error
+        if (event === "error") {
+          analysis.setStreamError(`Stream error: ${data?.message || "Unknown"}`);
+          markDisconnected();
+          return;
+        }
+
+        // Data events
+        if (["location", "prediction", "physics", "financial", "geometry", "explanation"].includes(event)) {
+          analysis.handleDataEvent(event, data);
+          analysis.armWatchdog(45_000, handleStreamFailure);
         }
       },
       {
         model: "linear_regression",
-        region: systemConfig.region,
-        system_capacity_kw: systemConfig.systemCapacityKw,
-        panel_efficiency: PANEL_EFFICIENCY_MAP[systemConfig.panelTechnology],
-        performance_ratio: systemConfig.performanceRatio,
-        electricity_tariff_usd: systemConfig.electricityTariffUsd,
+        region: workspace.state.systemConfig.region,
+        system_capacity_kw: workspace.state.systemConfig.systemCapacityKw,
+        panel_efficiency: PANEL_EFFICIENCY_MAP[workspace.state.systemConfig.panelTechnology],
+        performance_ratio: workspace.state.systemConfig.performanceRatio,
+        electricity_tariff_usd: workspace.state.systemConfig.electricityTariffUsd,
+        panel_technology: workspace.state.systemConfig.panelTechnology,
+        installation_type: workspace.state.systemConfig.installationType,
       },
     );
 
-    cancelRef.current = cancel;
-  }, [
-    armWatchdog,
-    clearWatchdog,
-    lat,
-    lon,
-    recoverWithAnalyze,
-    resetResultState,
-    systemConfig.electricityTariffUsd,
-    systemConfig.panelTechnology,
-    systemConfig.performanceRatio,
-    systemConfig.region,
-    systemConfig.systemCapacityKw,
-  ]);
+    analysis.setCancelCallback(cancel);
+  }, [workspace.state, analysis, handleStreamFailure, markDisconnected, workspace]);
+
+  // Effective delta
+  const effectiveDelta = analysis.state.mlVsPhysicsDelta ??
+    (analysis.state.physicsSimulation?.status === "ok" &&
+      typeof analysis.state.physicsSimulation.annual_energy_kwh === "number" &&
+      analysis.state.financial
+      ? {
+        ml_annual_output_kwh: Number(analysis.state.financial.annual_output_kwh),
+        physics_annual_output_kwh: Number(analysis.state.physicsSimulation.annual_energy_kwh),
+        delta_kwh: Number(
+          (Number(analysis.state.financial.annual_output_kwh) - Number(analysis.state.physicsSimulation.annual_energy_kwh)).toFixed(2),
+        ),
+        delta_pct:
+          Number(analysis.state.physicsSimulation.annual_energy_kwh) > 0
+            ? Number(
+              (
+                ((Number(analysis.state.financial.annual_output_kwh) -
+                  Number(analysis.state.physicsSimulation.annual_energy_kwh)) /
+                  Number(analysis.state.physicsSimulation.annual_energy_kwh)) *
+                100
+              ).toFixed(2),
+            )
+            : null,
+      }
+      : null);
+
+  // Save analysis
+  const hasResults = !!(
+    analysis.state.prediction ||
+    analysis.state.financial ||
+    analysis.state.explanation ||
+    analysis.state.monthly ||
+    analysis.state.physicsSimulation
+  );
+  const canSaveAnalysis = !!(analysis.state.prediction && analysis.state.financial && analysis.state.explanation);
+  const showEmptyState = view === "setup" && !hasResults && !isLoading;
+  const canViewResults =
+    view === "pipeline" &&
+    hasResults &&
+    (analysis.state.stage === "complete" || analysis.state.stage === "idle");
+  const shouldGuardExit = view === "results" && hasResults && !hasSavedAnalysis;
+
+  const handleSaveAnalysis = useCallback((name: string) => {
+    if (!analysis.state.prediction || !analysis.state.financial || !analysis.state.explanation) {
+      workspace.setSaveStatus("Complete an analysis before saving.");
+      return;
+    }
+
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      workspace.setSaveStatus("Name is required.");
+      return;
+    }
+
+    const resultToSave: AnalysisResult = {
+      prediction: analysis.state.prediction,
+      financial: analysis.state.financial,
+      explanation: analysis.state.explanation,
+      geometry: analysis.state.geometry ?? undefined,
+      monthly: analysis.state.monthly ?? undefined,
+      data_provenance: analysis.state.dataProvenance ?? undefined,
+      physics_simulation: analysis.state.physicsSimulation ?? undefined,
+      ml_vs_physics_delta: analysis.state.mlVsPhysicsDelta ?? undefined,
+      location: { lat: workspace.state.lat, lon: workspace.state.lon },
+    };
+
+    const normalizedName = trimmedName.toLowerCase();
+    const existing = locations.find(
+      (item) =>
+        item.name.toLowerCase() === normalizedName ||
+        (Math.abs(item.coordinates.lat - workspace.state.lat) < 0.0001 &&
+          Math.abs(item.coordinates.lon - workspace.state.lon) < 0.0001),
+    );
+
+    const run = createSavedRunFromAnalysis(resultToSave);
+
+    if (existing) {
+      upsertLocation({
+        ...existing,
+        name: trimmedName,
+        coordinates: { lat: workspace.state.lat, lon: workspace.state.lon },
+        systemConfig: workspace.state.systemConfig,
+        latestRun: run,
+        updatedAt: new Date().toISOString(),
+      });
+      workspace.setSaveStatus(`Updated ${trimmedName}.`);
+    } else {
+      const created = createLocation({
+        name: trimmedName,
+        coordinates: { lat: workspace.state.lat, lon: workspace.state.lon },
+        systemConfig: workspace.state.systemConfig,
+      });
+      attachRun(created.id, run);
+      workspace.setSaveStatus(`Saved as ${trimmedName}.`);
+    }
+
+    setSaveDialogOpen(false);
+    setSaveName("");
+    setHasSavedAnalysis(true);
+  }, [analysis.state, workspace.state, workspace, locations, createLocation, upsertLocation, attachRun]);
+
+  const handleSaveDialogChange = useCallback((nextOpen: boolean) => {
+    setSaveDialogOpen(nextOpen);
+    if (nextOpen) {
+      setSaveName("");
+      if (workspace.state.saveStatus) workspace.setSaveStatus(null);
+    }
+  }, [workspace]);
+
+  const handleResetToSetup = useCallback(() => {
+    analysis.resetAnalysis();
+    setView("setup");
+    setSaveDialogOpen(false);
+    setSaveName("");
+    setPendingNavigation(null);
+    setHasSavedAnalysis(false);
+    if (workspace.state.saveStatus) workspace.setSaveStatus(null);
+  }, [analysis, workspace]);
+
+  const handleRequestExit = useCallback((nextHref?: string) => {
+    if (shouldGuardExit) {
+      setPendingNavigation(nextHref ?? null);
+      setShowExitConfirm(true);
+      return;
+    }
+
+    if (nextHref) {
+      router.push(nextHref);
+      return;
+    }
+
+    handleResetToSetup();
+  }, [shouldGuardExit, handleResetToSetup, router]);
+
+  const handleViewResults = useCallback(() => {
+    setView("results");
+  }, []);
 
   useEffect(() => {
-    return () => {
-      cancelRef.current?.();
-      clearWatchdog();
-    };
-  }, [clearWatchdog]);
+    try {
+      const dismissed = window.localStorage.getItem("zenith:disclaimer-dismissed");
+      if (!dismissed) setShowDisclaimer(true);
+    } catch {
+      setShowDisclaimer(true);
+    }
+  }, []);
 
-  const hasResults = prediction || financial || explanation || monthly;
+  const handleCloseDisclaimer = useCallback(() => {
+    if (dismissDisclaimer) {
+      try {
+        window.localStorage.setItem("zenith:disclaimer-dismissed", "true");
+      } catch {
+        // ignore storage issues
+      }
+    }
+    setShowDisclaimer(false);
+  }, [dismissDisclaimer]);
+
+  const handleSaveNameChange = useCallback((nextValue: string) => {
+    setSaveName(nextValue);
+    if (workspace.state.saveStatus) workspace.setSaveStatus(null);
+  }, [workspace]);
+
+  const handleExitConfirmed = useCallback(() => {
+    setShowExitConfirm(false);
+    if (pendingNavigation) {
+      const href = pendingNavigation;
+      setPendingNavigation(null);
+      router.push(href);
+      return;
+    }
+    handleResetToSetup();
+  }, [pendingNavigation, handleResetToSetup, router]);
+
+  const handleOpenLocations = useCallback((event: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!shouldGuardExit) {
+      return;
+    }
+    event.preventDefault();
+    setPendingNavigation("/locations");
+    setShowExitConfirm(true);
+  }, [shouldGuardExit]);
+
+  useEffect(() => {
+    if (dashboardWorkspace.unsavedAnalysis !== shouldGuardExit) {
+      dashboardWorkspace.setUnsavedAnalysis(shouldGuardExit);
+    }
+  }, [dashboardWorkspace, shouldGuardExit]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!shouldGuardExit) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [shouldGuardExit]);
+
+  useEffect(() => {
+    const onDocumentClick = (event: MouseEvent) => {
+      if (!shouldGuardExit) return;
+      const target = event.target as Element | null;
+      const anchor = target?.closest("a[href]") as HTMLAnchorElement | null;
+      if (!anchor) return;
+      const href = anchor.getAttribute("href");
+      if (!href || href.startsWith("#") || href.startsWith("javascript:")) return;
+
+      const url = new URL(anchor.href, window.location.origin);
+      if (url.origin !== window.location.origin) return;
+      if (url.pathname === window.location.pathname && url.search === window.location.search) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      setPendingNavigation(`${url.pathname}${url.search}${url.hash}`);
+      setShowExitConfirm(true);
+    };
+
+    document.addEventListener("click", onDocumentClick, true);
+    return () => document.removeEventListener("click", onDocumentClick, true);
+  }, [shouldGuardExit]);
 
   return (
-    <div className="space-y-8 py-6">
-      <header className="space-y-2">
-        <h1 className="text-2xl font-semibold text-foreground md:text-3xl">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">
-          Analyze solar potential, financial return, and AI-backed explanation.
-        </p>
-      </header>
-
-      <section className="space-y-4">
-        <h2 className="text-xl font-semibold flex items-center gap-2">
-          <MapPin className="h-5 w-5 text-sky-400" />
-          Select Location
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Search for a city to zoom in, then click the map or drag the pin to pinpoint your location.
-        </p>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <LocationMap
-              lat={lat}
-              lon={lon}
-              onLocationChange={(newLat, newLon) => {
-                setLat(newLat);
-                setLon(newLon);
-              }}
-            />
+    <div className="space-y-10 py-6">
+      <Dialog open={showDisclaimer} onOpenChange={(nextOpen) => !nextOpen && handleCloseDisclaimer()}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Project notice</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm text-muted-foreground">
+            <p>
+              This is an exploratory project and is currently under development. Results are estimates and may not be fully accurate yet.
+            </p>
+            <p>
+              We are improving the data sources, calculations, and explanations. Please verify important decisions with
+              a qualified professional.
+            </p>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={dismissDisclaimer}
+                onChange={(event) => setDismissDisclaimer(event.target.checked)}
+              />
+              Do not show again
+            </label>
           </div>
-
-          <div className="space-y-4">
-            <CoordinateInput lat={lat} lon={lon} onLatChange={setLat} onLonChange={setLon} />
-
-            <SystemConfigPanel value={systemConfig} onChange={setSystemConfig} disabled={isLoading} />
-
-            <Card className="glass-card">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <ChartNoAxesColumn className="h-4 w-4 text-sky-400" />
-                  Location Average Solar Inputs
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                {stage === "location" && !annualAverages ? (
-                  <>
-                    <Skeleton className="h-4 w-3/4" />
-                    <Skeleton className="h-4 w-2/3" />
-                    <Skeleton className="h-4 w-1/2" />
-                  </>
-                ) : annualAverages ? (
-                  <div className="space-y-1 text-muted-foreground">
-                    <p>
-                      Temperature: <span className="font-medium text-foreground">{annualAverages.Temperature?.toFixed(2)} °C</span>
-                    </p>
-                    <p>
-                      Humidity: <span className="font-medium text-foreground">{annualAverages.Humidity?.toFixed(2)} %</span>
-                    </p>
-                    <p>
-                      Wind Speed: <span className="font-medium text-foreground">{annualAverages["Wind Speed"]?.toFixed(2)} m/s</span>
-                    </p>
-                    <p>
-                      Clear Sky Irradiance: <span className="font-medium text-foreground">{annualAverages["Clear Sky Irradiance"]?.toFixed(2)} kWh/m²/day</span>
-                    </p>
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground">Run analysis to load NASA climatological averages for this location.</p>
-                )}
-              </CardContent>
-            </Card>
-
-            <Button
-              onClick={handleAnalyze}
-              disabled={isLoading}
-              size="lg"
-              className="w-full bg-amber-400 text-foreground shadow-md shadow-amber-200/40 hover:bg-amber-500"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                  {stage === "location" && "Fetching location data…"}
-                  {stage === "prediction" && "Running prediction…"}
-                  {stage === "financial" && "Calculating financials…"}
-                  {stage === "explanation" && "Generating explanation…"}
-                </>
-              ) : (
-                <>
-                  <Sun className="h-5 w-5 mr-2" />
-                  Analyze Solar Potential
-                </>
-              )}
+          <DialogFooter>
+            <Button className="bg-amber-400 text-foreground hover:bg-amber-500" onClick={handleCloseDisclaimer}>
+              Continue
             </Button>
-          </div>
-        </div>
-      </section>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      {error && (
+      <Dialog open={showExitConfirm} onOpenChange={setShowExitConfirm}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Unsaved analysis</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This analysis is not saved. If you leave now, you will lose the results.
+          </p>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setShowExitConfirm(false)}>
+              Stay
+            </Button>
+            <Button
+              className="bg-amber-400 text-foreground hover:bg-amber-500"
+              onClick={handleExitConfirmed}
+            >
+              Leave anyway
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <DashboardHeader
+        title="Zenith"
+        subtitle="Estimate output, costs, and payback with clear assumptions."
+        lat={workspace.state.lat}
+        lon={workspace.state.lon}
+        capacityKw={workspace.state.systemConfig.systemCapacityKw}
+      />
+
+      {view === "setup" && (
+        <SetupView
+          lat={workspace.state.lat}
+          lon={workspace.state.lon}
+          isLoading={isLoading}
+          systemConfig={workspace.state.systemConfig}
+          annualAverages={analysis.state.annualAverages}
+          stage={analysis.state.stage}
+          showEmptyState={showEmptyState}
+          onLatChange={workspace.setLat}
+          onLonChange={workspace.setLon}
+          onSystemConfigChange={workspace.setSystemConfig}
+          onAnalyze={handleAnalyze}
+          LocationMapComponent={LocationMap}
+        />
+      )}
+
+      {view === "pipeline" && (
+        <PipelineView
+          stage={pipelineStage}
+          documents={analysis.state.activeDocuments}
+          errorMessage={analysis.state.error || undefined}
+          canViewResults={canViewResults}
+          onViewResults={handleViewResults}
+        />
+      )}
+
+      {view === "results" && (
+        <ResultsView
+          analysis={analysis.state}
+          locationsCount={locations.length}
+          saveDialogOpen={saveDialogOpen}
+          saveName={saveName}
+          canSaveAnalysis={canSaveAnalysis}
+          effectiveDelta={effectiveDelta}
+          saveStatus={workspace.state.saveStatus}
+          onSaveDialogChange={handleSaveDialogChange}
+          onSaveNameChange={handleSaveNameChange}
+          onSave={() => handleSaveAnalysis(saveName)}
+          onAnalyzeNewLocation={() => handleRequestExit()}
+          onOpenLocations={handleOpenLocations}
+        />
+      )}
+
+      {analysis.state.error && view !== "pipeline" && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-600">
-          {error}
+          {analysis.state.error}
         </div>
       )}
 
-      {(hasResults || isLoading) && (
-        <>
-          <Separator className="bg-white/40" />
-
-          <section className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <PredictionCard
-                prediction={prediction}
-                isLoading={stage === "location" || stage === "prediction"}
-                dataProvenance={dataProvenance}
-              />
-              <FinancialCard
-                financial={financial}
-                geometry={geometry}
-                isLoading={
-                  stage === "location" || stage === "prediction" || stage === "financial"
-                }
-              />
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <OutputChart monthly={monthly} isLoading={stage === "location"} />
-              <Card className="glass-card">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg font-semibold">Monthly Output Insight</CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground space-y-2">
-                  <p>
-                    Seasonal output trends help size system capacity and forecast expected savings.
-                  </p>
-                  <p>
-                    Use this monthly profile to compare low-yield and peak-yield periods before
-                    finalizing installation and storage decisions.
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-
-            <ExplanationPanel
-              explanation={explanation}
-              isLoading={
-                stage === "location" ||
-                stage === "prediction" ||
-                stage === "financial" ||
-                stage === "explanation"
-              }
-            />
-          </section>
-        </>
-      )}
-
-      <div className="text-center text-xs text-muted-foreground/60 pt-4">
-        <p>
-          Estimates are based on NASA POWER climatological data and standardized cost models.
-          Actual results vary by site and installation constraints.
-        </p>
+      <div className="text-center text-xs text-muted-foreground/70 pt-4">
+        <p>Estimates use long-term climate averages and standard cost models. Site conditions still apply.</p>
       </div>
 
-      <Chatbot />
+      {view === "results" && <Chatbot />}
     </div>
   );
 }

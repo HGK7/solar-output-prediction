@@ -184,7 +184,28 @@ export interface KeyDriver {
   feature: string;
   value: number;
   unit: string;
+  coefficient?: number;
   impact: string;
+}
+
+export interface MethodologyTraceItem {
+  step: string;
+  how: string;
+  why: string;
+}
+
+export interface InputTraceItem {
+  name: string;
+  value: string;
+  source: "user" | "nasa" | "default" | "derived" | string;
+  impact: string;
+}
+
+export interface CalculationTraceItem {
+  step: string;
+  formula: string;
+  result: string;
+  why: string;
 }
 
 export interface ExplanationResponse {
@@ -195,6 +216,13 @@ export interface ExplanationResponse {
   risk_factors: string[];
   confidence_assessment: "low" | "medium" | "high";
   financial_insight: string | null;
+  methodology_trace?: MethodologyTraceItem[];
+  input_trace?: InputTraceItem[];
+  calculation_trace?: CalculationTraceItem[];
+  assumptions_used?: string[];
+  grounded_context?: string;
+  citations?: RAGCitation[];
+  rag_pipeline?: RAGPipelineMeta;
   raw_response?: boolean;
   error?: string;
 }
@@ -211,6 +239,8 @@ export interface MonthlyData {
 
 export interface AnalysisResult {
   prediction: PredictionResult;
+  physics_simulation?: PhysicsSimulationResult;
+  ml_vs_physics_delta?: MLPhysicsDelta;
   financial: FinancialSummary;
   explanation: ExplanationResponse;
   geometry?: GeometryResult;
@@ -224,14 +254,41 @@ export interface AnalysisResult {
 
 export interface RAGCitation {
   source: string;
-  chunk: string;
+  section?: string;
+  chunk?: string;
+  source_path?: string | null;
+  link?: string | null;
+}
+
+export interface RAGRetrievedDocument {
+  source: string;
+  section?: string;
+  source_path?: string | null;
+  link?: string | null;
+  snippet: string;
+}
+
+export interface RAGPipelineMeta {
+  query: string;
+  answer: string;
+  confidence: "none" | "low" | "medium" | "high";
+  is_refusal: boolean;
+  refusal_reason?: string | null;
+  retrieval_count: number;
+  retrieved_documents: RAGRetrievedDocument[];
 }
 
 export interface RAGResponse {
   answer: string;
   citations: RAGCitation[];
-  confidence: "low" | "medium" | "high";
+  confidence: "none" | "low" | "medium" | "high";
+  query?: string;
+  retrieval_count?: number;
+  retrieved_documents?: RAGRetrievedDocument[];
   refusal?: boolean;
+  is_refusal?: boolean;
+  refusal_reason?: string | null;
+  raw_response?: boolean;
 }
 
 export interface ChatMessage {
@@ -242,9 +299,96 @@ export interface ChatMessage {
   timestamp: Date;
 }
 
+// ── UI State ──
+
+export type LoadingStage = "idle" | "location" | "prediction" | "physics" | "financial" | "explanation" | "complete" | "error";
+
+// ── Saved Locations & Runs (Guest Mode) ──
+
+export type SavedInstallationType = "rooftop" | "ground-mounted" | "carport";
+export type SavedPanelTechnology = "monocrystalline" | "polycrystalline" | "thin-film";
+export type SavedGridConnection = "grid-tied" | "hybrid" | "off-grid";
+export type SavedRegionType = "india" | "usa" | "europe" | "global";
+
+export interface SavedSystemConfig {
+  installationType: SavedInstallationType;
+  panelTechnology: SavedPanelTechnology;
+  gridConnection: SavedGridConnection;
+  region: SavedRegionType;
+  systemCapacityKw: number;
+  electricityTariffUsd: number;
+  performanceRatio: number;
+}
+
+export interface SavedRunSummary {
+  annualOutputKwh: number;
+  annualSavingsUsd: number;
+  paybackYears: number;
+  confidence: "low" | "medium" | "high";
+  modelUsed: string;
+}
+
+export interface SavedAnalysisRun {
+  id: string;
+  createdAt: string;
+  summary: SavedRunSummary;
+  result: AnalysisResult;
+}
+
+export interface SavedLocationMetadata {
+  ownerName: string;
+  installationDate: string | null;
+  notes: string;
+  tags: string[];
+}
+
+export interface SavedLocationRecord {
+  id: string;
+  name: string;
+  coordinates: Coordinates;
+  systemConfig: SavedSystemConfig;
+  metadata: SavedLocationMetadata;
+  createdAt: string;
+  updatedAt: string;
+  latestRun: SavedAnalysisRun | null;
+}
+
+export interface SavedLocationsStoreState {
+  version: number;
+  locations: SavedLocationRecord[];
+}
+
 // ── SSE ──
 
-export type SSEStage = "location" | "prediction" | "financial" | "explanation" | "done" | "error";
+export type SSEStage = "location" | "prediction" | "physics" | "financial" | "explanation" | "done" | "error";
+
+export interface PhysicsSimulationResult {
+  status: "ok" | "error" | "skipped";
+  model?: string;
+  annual_energy_kwh?: number;
+  specific_yield_kwh_per_kw?: number;
+  capacity_factor_pct?: number;
+  monthly_energy_kwh?: Array<{ month: string; energy_kwh: number }>;
+  assumptions?: {
+    system_capacity_kw: number;
+    panel_technology: string;
+    installation_type: string;
+    performance_ratio: number;
+    losses_pct: number;
+    panel_efficiency: number;
+    tilt_deg: number;
+    azimuth_deg: number;
+  };
+  reason?: string;
+  error?: string;
+}
+
+export interface MLPhysicsDelta {
+  ml_annual_output_kwh: number;
+  physics_annual_output_kwh: number;
+  delta_kwh: number;
+  delta_pct: number | null;
+}
 
 export interface SSEEvent {
   event: string;

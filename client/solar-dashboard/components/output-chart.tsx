@@ -30,7 +30,7 @@ const MONTHS_ORDER = [
 export function OutputChart({ monthly, isLoading }: OutputChartProps) {
   if (isLoading) {
     return (
-      <Card className="bg-white/70 backdrop-blur-md border-white/40 shadow-md shadow-yellow-100/40">
+      <Card className="glass-card border-amber-200/40 bg-white/80">
         <CardHeader>
           <Skeleton className="h-6 w-48" />
         </CardHeader>
@@ -58,11 +58,11 @@ export function OutputChart({ monthly, isLoading }: OutputChartProps) {
   });
 
   return (
-    <Card className="bg-white/70 backdrop-blur-md border-white/40 shadow-md shadow-yellow-100/40">
+    <Card className="glass-card border-amber-200/40 bg-white/80">
       <CardHeader className="pb-2">
         <CardTitle className="text-lg font-semibold flex items-center gap-2">
           <Calendar className="h-5 w-5 text-amber-400" />
-          Monthly Solar Profile
+          Monthly solar profile
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -70,33 +70,33 @@ export function OutputChart({ monthly, isLoading }: OutputChartProps) {
           <ComposedChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
             <defs>
               <linearGradient id="solarGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.5} />
-                <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.05} />
+                <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.5} />
+                <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0.05} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-            <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="#94a3b8" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+            <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="var(--muted-foreground)" />
             <YAxis
               yAxisId="left"
               tick={{ fontSize: 12 }}
-              stroke="#94a3b8"
+              stroke="var(--muted-foreground)"
               label={{
                 value: "kWh/m²/day",
                 angle: -90,
                 position: "insideLeft",
-                style: { fontSize: 11, fill: "#94a3b8" },
+                style: { fontSize: 11, fill: "var(--muted-foreground)" },
               }}
             />
             <YAxis
               yAxisId="right"
               orientation="right"
               tick={{ fontSize: 12 }}
-              stroke="#94a3b8"
+              stroke="var(--muted-foreground)"
               label={{
                 value: "°C",
                 angle: 90,
                 position: "insideRight",
-                style: { fontSize: 11, fill: "#94a3b8" },
+                style: { fontSize: 11, fill: "var(--muted-foreground)" },
               }}
             />
             <Tooltip
@@ -129,7 +129,7 @@ export function OutputChart({ monthly, isLoading }: OutputChartProps) {
               yAxisId="left"
               type="monotone"
               dataKey="Solar Irradiance"
-              stroke="#f59e0b"
+              stroke="var(--chart-1)"
               strokeWidth={2}
               fill="url(#solarGradient)"
             />
@@ -138,16 +138,16 @@ export function OutputChart({ monthly, isLoading }: OutputChartProps) {
               yAxisId="left"
               type="monotone"
               dataKey="Clear Sky"
-              stroke="#38bdf8"
+              stroke="var(--chart-3)"
               strokeWidth={2}
               strokeDasharray="6 3"
-              dot={{ r: 3, fill: "#38bdf8" }}
+              dot={{ r: 3, fill: "var(--chart-3)" }}
             />
             {/* Cloud loss as small bars showing the gap */}
             <Bar
               yAxisId="left"
               dataKey="Cloud Loss"
-              fill="#cbd5e1"
+              fill="var(--chart-4)"
               fillOpacity={0.5}
               barSize={16}
               radius={[2, 2, 0, 0]}
@@ -157,17 +157,17 @@ export function OutputChart({ monthly, isLoading }: OutputChartProps) {
               yAxisId="right"
               type="monotone"
               dataKey="Temperature"
-              stroke="#ef4444"
+              stroke="var(--chart-2)"
               strokeWidth={2}
-              dot={{ r: 3, fill: "#ef4444" }}
+              dot={{ r: 3, fill: "var(--chart-2)" }}
             />
           </ComposedChart>
         </ResponsiveContainer>
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground text-center mt-3 justify-center">
-          <span><span className="inline-block w-3 h-0.5 bg-amber-400 mr-1 align-middle" /> Solar Irradiance (actual)</span>
-          <span><span className="inline-block w-3 h-0.5 bg-sky-400 mr-1 align-middle border-dashed" /> Clear Sky (theoretical max)</span>
-          <span><span className="inline-block w-3 h-2 bg-slate-300/50 mr-1 align-middle rounded-sm" /> Cloud/Atmos. Loss</span>
-          <span><span className="inline-block w-3 h-0.5 bg-red-500 mr-1 align-middle" /> Temperature</span>
+          <span><span className="inline-block w-3 h-0.5 mr-1 align-middle" style={{ backgroundColor: "var(--chart-1)" }} /> Solar Irradiance (actual)</span>
+          <span><span className="inline-block w-3 h-0.5 mr-1 align-middle border-dashed" style={{ backgroundColor: "var(--chart-3)" }} /> Clear Sky (theoretical max)</span>
+          <span><span className="inline-block w-3 h-2 mr-1 align-middle rounded-sm" style={{ backgroundColor: "var(--chart-4)" }} /> Cloud/Atmos. Loss</span>
+          <span><span className="inline-block w-3 h-0.5 mr-1 align-middle" style={{ backgroundColor: "var(--chart-2)" }} /> Temperature</span>
         </div>
       </CardContent>
     </Card>

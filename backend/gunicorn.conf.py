@@ -13,11 +13,11 @@ bind = f"0.0.0.0:{os.environ.get('PORT', '5000')}"
 
 # Worker processes — single worker to stay within free-tier memory
 workers = 1
-worker_class = "gthread"
-threads = 2
+worker_class = "sync"
+threads = 1
 
-# Timeout (longer for model loading + lazy RAG init on first call)
-timeout = 180
+# Timeout (longer for model loading + lazy RAG init + SSE streaming)
+timeout = 240
 graceful_timeout = 30
 keepalive = 5
 

@@ -37,6 +37,8 @@ shap>=0.50,<1.0
 
 # --- Modern LangChain & LangGraph Orchestration ---
 langchain>=1.2,<2.0
+langchain-community>=0.3,<0.4
+langchain-text-splitters>=0.3,<0.4
 langchain-google-genai>=4.2,<5.0
 langgraph>=1.1,<2.0
 langchain-chroma>=1.0,<2.0

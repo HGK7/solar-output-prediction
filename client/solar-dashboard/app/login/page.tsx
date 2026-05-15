@@ -69,12 +69,15 @@ export default function LoginPage() {
                     Back to Home
                   </Link>
                 </Button>
-                <Button asChild variant="outline" className="flex-1">
-                  <Link href="/signup">
-                    <UserPlus className="h-4 w-4" />
-                    Create Account
-                  </Link>
-                </Button>
+                {/**
+                 * Auth entry points are intentionally disabled until account creation is wired up.
+                 * <Button asChild variant="outline" className="flex-1">
+                 *   <Link href="/signup">
+                 *     <UserPlus className="h-4 w-4" />
+                 *     Create Account
+                 *   </Link>
+                 * </Button>
+                 */}
               </div>
             </CardContent>
           </Card>

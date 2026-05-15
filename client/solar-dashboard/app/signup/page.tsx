@@ -83,12 +83,15 @@ export default function SignupPage() {
                     Back to Home
                   </Link>
                 </Button>
-                <Button asChild variant="outline" className="flex-1">
-                  <Link href="/login">
-                    <LogIn className="h-4 w-4" />
-                    Sign In
-                  </Link>
-                </Button>
+                {/**
+                 * Auth entry points are intentionally disabled until account creation is wired up.
+                 * <Button asChild variant="outline" className="flex-1">
+                 *   <Link href="/login">
+                 *     <LogIn className="h-4 w-4" />
+                 *     Sign In
+                 *   </Link>
+                 * </Button>
+                 */}
               </div>
             </CardContent>
           </Card>

@@ -3,11 +3,15 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import L from "leaflet";
 import { Search, MapPin, Loader2, X } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 interface LocationMapProps {
   lat: number;
   lon: number;
   onLocationChange: (lat: number, lon: number) => void;
+  disabled?: boolean;
 }
 
 /* ─── Nominatim Geocoding (free, no API key) ────────────── */
@@ -52,10 +56,11 @@ const DefaultIcon = L.icon({
 
 /* ─── Component ─────────────────────────────────────────── */
 
-export function LocationMap({ lat, lon, onLocationChange }: LocationMapProps) {
+export function LocationMap({ lat, lon, onLocationChange, disabled = false }: LocationMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
+  const disabledRef = useRef(disabled);
 
   // Search state
   const [query, setQuery] = useState("");
@@ -65,8 +70,13 @@ export function LocationMap({ lat, lon, onLocationChange }: LocationMapProps) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    disabledRef.current = disabled;
+  }, [disabled]);
+
   // Debounced geocoding search
   const handleSearch = useCallback((value: string) => {
+    if (disabledRef.current) return;
     setQuery(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
@@ -78,16 +88,25 @@ export function LocationMap({ lat, lon, onLocationChange }: LocationMapProps) {
 
     setIsSearching(true);
     debounceRef.current = setTimeout(async () => {
+      if (disabledRef.current) {
+        setIsSearching(false);
+        return;
+      }
       const data = await geocodeCity(value.trim());
+      if (disabledRef.current) {
+        setIsSearching(false);
+        return;
+      }
       setResults(data);
       setShowResults(data.length > 0);
       setIsSearching(false);
     }, 350);
-  }, []);
+  }, [disabled]);
 
   // Select a result — zoom map and update coordinates
   const handleSelect = useCallback(
     (result: GeoResult) => {
+      if (disabledRef.current) return;
       const newLat = parseFloat(parseFloat(result.lat).toFixed(4));
       const newLon = parseFloat(parseFloat(result.lon).toFixed(4));
 
@@ -117,7 +136,7 @@ export function LocationMap({ lat, lon, onLocationChange }: LocationMapProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Initialize map — English tile layer (CartoDB Positron)
+  // Initialize map — satellite imagery base layer
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return;
 
@@ -127,14 +146,13 @@ export function LocationMap({ lat, lon, onLocationChange }: LocationMapProps) {
       zoomControl: true,
     });
 
-    // OpenStreetMap with English labels via CartoDB Voyager (detailed + English)
+    // Esri World Imagery provides satellite tiles without an API key.
     L.tileLayer(
-      "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
       {
         attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
+          'Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
         maxZoom: 19,
-        subdomains: "abcd",
       },
     ).addTo(map);
 
@@ -147,6 +165,7 @@ export function LocationMap({ lat, lon, onLocationChange }: LocationMapProps) {
       .openPopup();
 
     marker.on("dragend", () => {
+      if (disabledRef.current) return;
       const pos = marker.getLatLng();
       onLocationChange(
         parseFloat(pos.lat.toFixed(4)),
@@ -155,6 +174,7 @@ export function LocationMap({ lat, lon, onLocationChange }: LocationMapProps) {
     });
 
     map.on("click", (e: L.LeafletMouseEvent) => {
+      if (disabledRef.current) return;
       const { lat: newLat, lng: newLon } = e.latlng;
       marker.setLatLng([newLat, newLon]);
       onLocationChange(
@@ -166,9 +186,14 @@ export function LocationMap({ lat, lon, onLocationChange }: LocationMapProps) {
     mapRef.current = map;
     markerRef.current = marker;
 
-    setTimeout(() => map.invalidateSize(), 100);
+    const invalidateTimer = window.setTimeout(() => {
+      if (mapRef.current) {
+        mapRef.current.invalidateSize();
+      }
+    }, 100);
 
     return () => {
+      window.clearTimeout(invalidateTimer);
       map.remove();
       mapRef.current = null;
       markerRef.current = null;
@@ -191,67 +216,81 @@ export function LocationMap({ lat, lon, onLocationChange }: LocationMapProps) {
   }, [lat, lon]);
 
   return (
-    <div className="relative">
-      {/* ── Search Bar (overlay on map) ── */}
-      <div
-        ref={searchContainerRef}
-        className="absolute top-3 left-3 right-3 z-1000"
-      >
-        <div className="relative">
-          <div className="flex items-center gap-2 bg-white/90 backdrop-blur-md border border-white/60 rounded-xl shadow-lg shadow-black/5 px-3 py-2">
-            {isSearching ? (
-              <Loader2 className="h-4 w-4 text-amber-500 animate-spin shrink-0" />
-            ) : (
-              <Search className="h-4 w-4 text-muted-foreground shrink-0" />
-            )}
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => handleSearch(e.target.value)}
-              onFocus={() => results.length > 0 && setShowResults(true)}
-              placeholder="Search for a city or location…"
-              className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
-            />
-            {query && (
-              <button
-                onClick={() => {
-                  setQuery("");
-                  setResults([]);
-                  setShowResults(false);
-                }}
-                className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                aria-label="Clear search"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
+    <div className="space-y-3">
+      <Card className="glass-card">
+        <CardContent className="p-3">
+          <div ref={searchContainerRef} className="relative">
+            <div className="flex items-center gap-2">
+              {isSearching ? (
+                <Loader2 className="h-4 w-4 text-amber-500 animate-spin shrink-0" />
+              ) : (
+                <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+              )}
+
+              <Input
+                type="text"
+                value={query}
+                onChange={(e) => handleSearch(e.target.value)}
+                onFocus={() => results.length > 0 && setShowResults(true)}
+                placeholder="Search for a city or location…"
+                className="bg-background/70"
+                disabled={disabled}
+              />
+
+              {query && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => {
+                    if (disabled) return;
+                    setQuery("");
+                    setResults([]);
+                    setShowResults(false);
+                  }}
+                  aria-label="Clear search"
+                  disabled={disabled}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
+
+            {showResults && results.length > 0 && (
+              <div className="absolute top-full left-0 right-0 mt-1.5 z-40 bg-white/95 backdrop-blur-md border border-white/60 rounded-xl shadow-lg shadow-black/10 overflow-hidden">
+                {results.map((r) => (
+                  <button
+                    key={r.place_id}
+                    onClick={() => handleSelect(r)}
+                    className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left hover:bg-amber-50/60 transition-colors cursor-pointer border-b border-gray-100 last:border-b-0"
+                  >
+                    <MapPin className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+                    <span className="text-sm text-foreground leading-snug line-clamp-2">
+                      {r.display_name}
+                    </span>
+                  </button>
+                ))}
+              </div>
             )}
           </div>
+        </CardContent>
+      </Card>
 
-          {/* ── Search Results Dropdown ── */}
-          {showResults && results.length > 0 && (
-            <div className="absolute top-full left-0 right-0 mt-1.5 bg-white/95 backdrop-blur-md border border-white/60 rounded-xl shadow-lg shadow-black/10 overflow-hidden">
-              {results.map((r) => (
-                <button
-                  key={r.place_id}
-                  onClick={() => handleSelect(r)}
-                  className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left hover:bg-amber-50/60 transition-colors cursor-pointer border-b border-gray-100 last:border-b-0"
-                >
-                  <MapPin className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
-                  <span className="text-sm text-foreground leading-snug line-clamp-2">
-                    {r.display_name}
-                  </span>
-                </button>
-              ))}
+      <Card className="glass-card overflow-hidden">
+        <CardContent className="relative p-0">
+          <div
+            ref={mapContainerRef}
+            className={`h-87.5 w-full ${disabled ? "pointer-events-none opacity-60" : ""}`}
+          />
+          {disabled && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/20 backdrop-blur-[1px]">
+              <div className="rounded-full border border-white/60 bg-white/80 px-4 py-2 text-xs font-medium text-muted-foreground shadow-sm">
+                Analysis locked
+              </div>
             </div>
           )}
-        </div>
-      </div>
-
-      {/* ── Map Container ── */}
-      <div
-        ref={mapContainerRef}
-        className="h-87.5 w-full rounded-xl border border-white/40 shadow-md"
-      />
+        </CardContent>
+      </Card>
     </div>
   );
 }
