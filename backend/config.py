@@ -21,7 +21,7 @@ class Config:
     BASE_DIR: str = os.path.dirname(os.path.abspath(__file__))
     DATA_PATH: str = os.getenv(
         "DATA_PATH",
-        os.path.join(BASE_DIR, "..", "cleaned_data.csv"),
+        os.path.join(BASE_DIR, "data", "cleaned_data.csv"),
     )
     MODEL_DIR: str = os.path.join(BASE_DIR, "trained_models")
 
@@ -31,6 +31,18 @@ class Config:
     CHUNK_SIZE: int = 500
     CHUNK_OVERLAP: int = 50
     RAG_TOP_K: int = 3
+
+    # --- Memory / deployment profile (Render free tier) ---
+    # analytical = lightweight PSH math (default); pysam = NREL PVWatts; off = skip
+    PHYSICS_MODE: str = os.getenv("PHYSICS_MODE", "analytical").lower()
+    # When false, /analyze skips HuggingFace+Chroma grounding (saves ~150–300 MB)
+    ENABLE_RAG_GROUNDING: bool = (
+        os.getenv("ENABLE_RAG_GROUNDING", "false").lower() == "true"
+    )
+    # When true, refuse to train at request time — models must exist (build or commit)
+    REQUIRE_PRETRAINED_MODELS: bool = (
+        os.getenv("REQUIRE_PRETRAINED_MODELS", "true").lower() == "true"
+    )
 
     # --- Feature Schema ---
     FEATURE_NAMES: list[str] = [

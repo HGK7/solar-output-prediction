@@ -8,6 +8,9 @@ __pycache__/
 *.ipynb
 *.csv
 
+# Committed training data for Render build (small climatology CSV)
+!backend/data/cleaned_data.csv
+
 # Keep specific runtime assets tracked
 !backend/trained_models/*.joblib
 
@@ -22,4 +25,15 @@ node_modules/
 .DS_Store
 Thumbs.db
 
-AGENTS.md
+# Agent / AI context (human docs — docs/adr/, READMEs — stay tracked)
+**/AGENTS.md
+**/CLAUDE.md
+**/CONTEXT.md
+**/CONTEXT-MAP.md
+**/docs/agents/
+**/docs/context/
+**/.scratch/
+**/.agents/
+skills-lock.json
+.cursor/
+.cursorrules

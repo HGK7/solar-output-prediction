@@ -55,7 +55,16 @@ class ModelManager:
         lr_path = os.path.join(Config.MODEL_DIR, "linear_regression.joblib")
         svm_path = os.path.join(Config.MODEL_DIR, "svm.joblib")
 
-        if os.path.exists(lr_path) and os.path.exists(svm_path):
+        models_exist = os.path.exists(lr_path) and os.path.exists(svm_path)
+
+        if not models_exist and Config.REQUIRE_PRETRAINED_MODELS:
+            raise RuntimeError(
+                "Pre-trained models not found in trained_models/. "
+                "Run `python scripts/train_models.py` at build time or set "
+                "REQUIRE_PRETRAINED_MODELS=false for local dev only."
+            )
+
+        if models_exist:
             logger.info("Loading pre-trained models from disk …")
             lr.load(lr_path)
             svm.load(svm_path)
@@ -87,6 +96,7 @@ class ModelManager:
         return model
 
     def list_models(self) -> list[str]:
+        self.initialize()
         return list(self._models.keys())
 
     def get_data_stats(self) -> dict | None:

@@ -13,7 +13,6 @@ Endpoints:
 import json
 import os
 import traceback
-from concurrent.futures import ThreadPoolExecutor
 
 from flask import Flask, Response, jsonify, request, stream_with_context
 from flask_cors import CORS
@@ -25,7 +24,11 @@ from services.explanation_service import ExplanationService
 from services.rag_service import RAGService
 from services.nasa_service import NASAService, NASAServiceError
 from services.financial_service import FinancialService
-from services.pysam_service import PhysicsInput, PhysicsSimulationError, PySAMService
+from services.physics_simulation_service import (
+    PhysicsInput,
+    PhysicsSimulationError,
+    PhysicsSimulationService,
+)
 from services.solar_geometry_service import SolarGeometryService
 from utils.validation import ValidationError, validate_coordinates
 from utils.logging import logger
@@ -44,8 +47,9 @@ def create_app() -> Flask:
     for warning in Config.validate():
         logger.warning("CONFIG WARNING: %s", warning)
 
-    # --- Initialize ML models ---
+    # --- Initialize ML models (fail fast if pretrained missing on Render) ---
     model_manager = ModelManager()
+    model_manager.initialize()
 
     # --- Initialize services ---
     prediction_service = PredictionService(model_manager)
@@ -53,7 +57,7 @@ def create_app() -> Flask:
     rag_service = RAGService()
     nasa_service = NASAService()
     financial_service = FinancialService()
-    pysam_service = PySAMService()
+    physics_service = PhysicsSimulationService()
     geometry_service = SolarGeometryService()
 
     def infer_region_from_coordinates(lat: float, lon: float) -> str:
@@ -96,6 +100,18 @@ def create_app() -> Flask:
         prediction_result: dict, financial_result: dict, system_context: dict
     ) -> dict:
         """Retrieve scientific grounding once and reuse in explanation pipeline."""
+        if not Config.ENABLE_RAG_GROUNDING:
+            return {
+                "answer": "",
+                "citations": [],
+                "is_refusal": False,
+                "confidence": "none",
+                "query": "",
+                "retrieval_count": 0,
+                "retrieved_documents": [],
+                "grounding_disabled": True,
+            }
+
         query = build_grounding_question(
             prediction_result,
             financial_result,
@@ -307,10 +323,12 @@ def create_app() -> Flask:
         except Exception as exc:
             warnings.append(f"model_status_unavailable: {exc}")
 
-        try:
-            rag_chunks = rag_service.document_count()
-        except Exception as exc:
-            warnings.append(f"rag_status_unavailable: {exc}")
+        rag_chunks = 0
+        if Config.ENABLE_RAG_GROUNDING:
+            try:
+                rag_chunks = rag_service.document_count()
+            except Exception as exc:
+                warnings.append(f"rag_status_unavailable: {exc}")
 
         status = "healthy" if not warnings else "degraded"
         return jsonify(
@@ -318,6 +336,8 @@ def create_app() -> Flask:
                 "status": status,
                 "models_loaded": models_loaded,
                 "rag_chunks": rag_chunks,
+                "physics_mode": Config.PHYSICS_MODE,
+                "rag_grounding_enabled": Config.ENABLE_RAG_GROUNDING,
                 "warnings": warnings,
             }
         )
@@ -489,25 +509,16 @@ def create_app() -> Flask:
                     ),
                 )
 
-                with ThreadPoolExecutor(max_workers=2) as executor:
-                    prediction_future = executor.submit(
-                        prediction_service.predict,
-                        pred_payload,
-                        data_source,
-                    )
-                    physics_future = executor.submit(
-                        pysam_service.simulate,
-                        physics_input,
-                    )
-
-                    prediction_result = prediction_future.result()
-                    try:
-                        physics_simulation = physics_future.result()
-                    except PhysicsSimulationError as exc:
-                        physics_simulation = {
-                            "status": "error",
-                            "error": str(exc),
-                        }
+                prediction_result = prediction_service.predict(
+                    pred_payload, data_source
+                )
+                try:
+                    physics_simulation = physics_service.simulate(physics_input)
+                except PhysicsSimulationError as exc:
+                    physics_simulation = {
+                        "status": "error",
+                        "error": str(exc),
+                    }
             else:
                 prediction_result = prediction_service.predict(
                     pred_payload, data_source=data_source
@@ -743,7 +754,7 @@ def create_app() -> Flask:
                         ),
                     )
                     try:
-                        physics_result = pysam_service.simulate(physics_input)
+                        physics_result = physics_service.simulate(physics_input)
                     except PhysicsSimulationError as exc:
                         physics_result = {
                             "status": "error",

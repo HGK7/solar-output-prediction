@@ -60,11 +60,26 @@ Query params: `temperature`, `humidity`, `wind_speed`, `clear_sky_irradiance`, `
 
 *Required for /explain and /ask endpoints.;  /predict works without it.
 
-## Deployment on Render
+## Deployment on Render (free tier)
 
-1. Create a new **Web Service** on Render
-2. Root directory: `backend`
-3. Build command: `pip install -r requirements.txt`
-4. Start command: `gunicorn app:app`
-5. Set environment variable `GEMINI_API_KEY`
-6. Set `CORS_ORIGINS` to your Vercel frontend URL
+Build trains models then starts gunicorn (`render.yaml`):
+
+```bash
+pip install -r requirements.txt && python scripts/train_models.py
+gunicorn -c gunicorn.conf.py app:app
+```
+
+| Variable | Render default | Purpose |
+| -------- | -------------- | ------- |
+| `PHYSICS_MODE` | `analytical` | Skip PySAM (~200+ MB). Use `pysam` only on paid tier + `requirements-dev.txt` |
+| `ENABLE_RAG_GROUNDING` | `false` | Skip HuggingFace+Chroma on `/analyze` |
+| `REQUIRE_PRETRAINED_MODELS` | `true` | No train-on-first-request OOM |
+
+Local full profile: `pip install -r requirements-dev.txt` and `PHYSICS_MODE=pysam`.
+
+## Manual Render setup
+
+1. Root directory: `backend`
+2. Build: `pip install -r requirements.txt && python scripts/train_models.py`
+3. Start: `gunicorn -c gunicorn.conf.py app:app`
+4. Env: `GEMINI_API_KEY`, `CORS_ORIGINS`, `PHYSICS_MODE=analytical`, `ENABLE_RAG_GROUNDING=false`

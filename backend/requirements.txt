@@ -1,5 +1,5 @@
 # =============================================================
-# Solar Intelligence & Optimization System — Backend Dependencies
+# Solar API — production dependencies (Render free tier)
 # =============================================================
 
 # --- Web Framework ---
@@ -7,18 +7,21 @@ flask>=3.1,<4.0
 flask-cors>=5.0,<6.0
 gunicorn>=23.0,<24.0
 
-# --- ML / Data ---
+# --- ML / Data (inference + build-time training) ---
 numpy>=2.1,<3.0
 pandas>=2.2,<3.0
 scikit-learn>=1.6,<2.0
 joblib>=1.4,<2.0
 
-# --- LLM / Gemini ---
+# --- LLM (explanation only; lazy if key missing) ---
 google-genai>=1.0,<2.0
+langchain-google-genai>=4.2,<5.0
 
-# --- RAG / Embeddings ---
+# --- RAG (lazy-loaded on /ask or when ENABLE_RAG_GROUNDING=true) ---
 chromadb>=1.3.5,<2.0
 sentence-transformers>=3.3,<4.0
+langchain-chroma>=1.0,<2.0
+langchain-huggingface>=1.0,<2.0
 
 # --- HTTP & Caching ---
 requests>=2.32,<3.0
@@ -27,23 +30,4 @@ cachetools>=5.5,<6.0
 # --- Utilities ---
 python-dotenv>=1.0,<2.0
 
-# =============================================================
-# NEW: Science Layer & Modern AI Orchestration (2026 Updates)
-# =============================================================
-
-# --- Physics Simulation & Explainability ---
-NREL-PySAM>=5.1,<6.0
-shap>=0.50,<1.0
-
-# --- Modern LangChain & LangGraph Orchestration ---
-langchain>=1.2,<2.0
-langchain-community>=0.3,<0.4
-langchain-text-splitters>=0.3,<0.4
-langchain-google-genai>=4.2,<5.0
-langgraph>=1.1,<2.0
-langchain-chroma>=1.0,<2.0
-langchain-huggingface>=1.0,<2.0
-
-# --- Document Parsing & Context (MCP) ---
-pypdf>=5.0,<6.0
-mcp>=1.2,<2.0
+# PySAM, shap, langgraph, mcp → see requirements-dev.txt (local / full profile)
