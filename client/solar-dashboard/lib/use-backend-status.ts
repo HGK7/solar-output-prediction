@@ -44,6 +44,12 @@ export function useBackendStatus() {
     intervalRef.current = setInterval(check, RETRY_INTERVAL_MS);
   }, [check, stopPolling]);
 
+  const markConnected = useCallback(() => {
+    setStatus("connected");
+    setLastChecked(new Date());
+    stopPolling();
+  }, [stopPolling]);
+
   // Called when an API call (e.g. /analyze) fails — re-checks backend
   const markDisconnected = useCallback(() => {
     setStatus("checking");
@@ -60,5 +66,5 @@ export function useBackendStatus() {
     return stopPolling;
   }, [check, startPolling, stopPolling]);
 
-  return { status, lastChecked, retry: check, markDisconnected };
+  return { status, lastChecked, retry: check, markConnected, markDisconnected };
 }

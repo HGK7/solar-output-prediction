@@ -7,6 +7,7 @@ type BackendStatusContextValue = {
   status: BackendStatus;
   lastChecked: Date | null;
   retry: () => Promise<void>;
+  markConnected: () => void;
   markDisconnected: () => void;
 };
 

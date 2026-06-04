@@ -29,7 +29,7 @@ const STATUS_CONFIG: Record<
     barClass: "bg-amber-50/80 border-amber-200/60 text-amber-700",
   },
   unreachable: {
-    label: "Server status: offline",
+    label: "Could not verify server status",
     dotClass: "bg-red-400",
     icon: WifiOff,
     barClass: "bg-red-50/80 border-red-200/60 text-red-500",

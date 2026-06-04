@@ -56,7 +56,7 @@ const STAGE_LABELS: Record<string, string> = {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { markDisconnected } = useBackendStatusContext();
+  const { markConnected, markDisconnected } = useBackendStatusContext();
   const dashboardWorkspace = useDashboardWorkspace();
   const workspace = useWorkspace();
   const analysis = useStreamingAnalysis();
@@ -121,13 +121,13 @@ export default function DashboardPage() {
       analysis.handleDataEvent("geometry", result.geometry);
       analysis.handleDataEvent("explanation", result.explanation);
 
-      // Complete immediately
+      markConnected();
       analysis.completeAnalysis();
     } catch (err) {
       analysis.setStreamError((err as Error).message || "Analysis failed");
       markDisconnected();
     }
-  }, [workspace.state.lat, workspace.state.lon, getFinancialOverrides, analysis, markDisconnected]);
+  }, [workspace.state.lat, workspace.state.lon, getFinancialOverrides, analysis, markConnected, markDisconnected]);
 
   // Main analysis trigger
   const handleAnalyze = useCallback(() => {
@@ -144,6 +144,7 @@ export default function DashboardPage() {
       (event, data) => {
         // Stage events trigger watchdog rearm
         if (event === "stage") {
+          markConnected();
           analysis.armWatchdog(45_000, handleStreamFailure);
           analysis.handleStageEvent(
             data.stage as Parameters<typeof analysis.handleStageEvent>[0],
@@ -154,6 +155,7 @@ export default function DashboardPage() {
 
         // Stream completion
         if (event === "done") {
+          markConnected();
           analysis.completeAnalysis();
           return;
         }
@@ -184,7 +186,7 @@ export default function DashboardPage() {
     );
 
     analysis.setCancelCallback(cancel);
-  }, [workspace.state, analysis, handleStreamFailure, markDisconnected, workspace]);
+  }, [workspace.state, analysis, handleStreamFailure, markConnected, markDisconnected, workspace]);
 
   // Effective delta
   const effectiveDelta = analysis.state.mlVsPhysicsDelta ??

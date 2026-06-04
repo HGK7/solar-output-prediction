@@ -69,7 +69,7 @@ const SERVER_STATUS_LABELS: Record<string, string> = {
   connected: "online",
   checking: "checking",
   sleeping: "starting",
-  unreachable: "offline",
+  unreachable: "unverified",
 };
 
 function DashboardNavMenu({

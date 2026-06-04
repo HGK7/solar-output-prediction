@@ -19,9 +19,12 @@ export async function healthCheck(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const res = await fetch(`${API_BASE}/health`, {
+    const res = await fetch("/api/health", {
       signal: controller.signal,
     });
+    if (res.status === 504) {
+      throw new DOMException("Backend timed out", "AbortError");
+    }
     if (!res.ok) throw new Error("Backend is not reachable.");
     return res.json();
   } finally {
