@@ -1,7 +1,6 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
-import { BookOpen } from "lucide-react";
+import { SourceDocumentTrigger } from "@/components/source-document-trigger";
 import type { ChatMessage as ChatMessageType } from "@/types";
 
 interface ChatMessageProps {
@@ -26,14 +25,12 @@ export function ChatMessage({ message }: ChatMessageProps) {
         {message.citations && message.citations.length > 0 && (
           <div className="mt-2 pt-2 border-t border-white/30 flex flex-wrap gap-1">
             {message.citations.map((citation, i) => (
-              <Badge
+              <SourceDocumentTrigger
                 key={i}
-                variant="outline"
-                className="text-[10px] bg-sky-50/50 text-sky-600 border-sky-200/50 gap-1"
-              >
-                <BookOpen className="h-2.5 w-2.5" />
-                {citation.source}
-              </Badge>
+                source={citation.source}
+                sourcePath={citation.source_path}
+                className="text-[10px] bg-sky-50/50 text-sky-600 border-sky-200/50"
+              />
             ))}
           </div>
         )}

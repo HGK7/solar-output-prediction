@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BrainCircuit, AlertTriangle, BookOpen, Sparkles, Calculator, Link as LinkIcon } from "lucide-react";
+import { BrainCircuit, AlertTriangle, BookOpen, Sparkles, Calculator } from "lucide-react";
+import { SourceDocumentTrigger } from "@/components/source-document-trigger";
 import type { ExplanationResponse } from "@/types";
 
 interface ExplanationPanelProps {
@@ -215,16 +216,12 @@ export function ExplanationPanel({ explanation, isLoading }: ExplanationPanelPro
                       <div key={`${doc.source}-${idx}`} className="rounded-lg border border-white/60 bg-white/70 px-3 py-2">
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-sm font-semibold text-foreground">{doc.source}</p>
-                          {doc.link && (
-                            <a
-                              href={doc.link}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-xs text-sky-700 inline-flex items-center gap-1 hover:underline"
-                            >
-                              <LinkIcon className="h-3.5 w-3.5" /> Source
-                            </a>
-                          )}
+                          <SourceDocumentTrigger
+                            source={doc.source}
+                            sourcePath={doc.source_path}
+                            excerpt={doc.snippet}
+                            variant="link"
+                          />
                         </div>
                         {doc.section && <p className="text-xs text-muted-foreground">{doc.section}</p>}
                         <p className="text-sm text-foreground/80 leading-relaxed mt-1">{doc.snippet}</p>
@@ -238,29 +235,16 @@ export function ExplanationPanel({ explanation, isLoading }: ExplanationPanelPro
             {citations.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {citations.map((citation, index) => (
-                  citation.link ? (
-                    <a
-                      key={`${citation.source}-${citation.section ?? ""}-${index}`}
-                      href={citation.link}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex"
-                    >
-                      <Badge variant="outline" className="text-xs hover:bg-sky-50">
-                        {citation.source}
-                        {citation.section ? ` (${citation.section})` : ""}
-                      </Badge>
-                    </a>
-                  ) : (
-                    <Badge
-                      key={`${citation.source}-${citation.section ?? ""}-${index}`}
-                      variant="outline"
-                      className="text-xs"
-                    >
-                      {citation.source}
-                      {citation.section ? ` (${citation.section})` : ""}
-                    </Badge>
-                  )
+                  <SourceDocumentTrigger
+                    key={`${citation.source}-${citation.section ?? ""}-${index}`}
+                    source={citation.source}
+                    sourcePath={citation.source_path}
+                    label={
+                      citation.section
+                        ? `${citation.source} (${citation.section})`
+                        : citation.source
+                    }
+                  />
                 ))}
               </div>
             )}

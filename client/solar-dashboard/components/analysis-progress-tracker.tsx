@@ -4,6 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { FileText, AlertCircle } from "lucide-react";
+import { SourceDocumentTrigger } from "@/components/source-document-trigger";
+import { resolveSourceFilename } from "@/lib/source-documents";
 import type { LoadingStage } from "@/types";
 
 const PIPELINE_STEPS: Array<{ key: LoadingStage; label: string; detail: string }> = [
@@ -114,15 +116,23 @@ export function AnalysisProgressTracker({
             Sources in use
           </div>
           <div className="flex flex-wrap gap-2">
-            {documents.map((doc) => (
-              <Badge
-                key={doc}
-                variant="secondary"
-                className="text-xs bg-amber-100/60 text-amber-900 border-amber-200"
-              >
-                {doc.replace(".md", "")}
-              </Badge>
-            ))}
+            {documents.map((doc) =>
+              resolveSourceFilename(doc) ? (
+                <SourceDocumentTrigger
+                  key={doc}
+                  source={doc}
+                  className="bg-amber-100/60 text-amber-900 border-amber-200"
+                />
+              ) : (
+                <Badge
+                  key={doc}
+                  variant="secondary"
+                  className="text-xs bg-amber-100/60 text-amber-900 border-amber-200"
+                >
+                  {doc.replace(".md", "")}
+                </Badge>
+              ),
+            )}
           </div>
         </div>
       )}
