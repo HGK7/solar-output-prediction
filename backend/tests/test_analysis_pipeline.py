@@ -79,6 +79,11 @@ class FakeExplanation:
         return {"summary": "explained", "citations": []}
 
 
+class QuotaExhaustedExplanation:
+    def explain(self, explanation_input):
+        raise ValueError("429 RESOURCE_EXHAUSTED: quota exceeded")
+
+
 class FakeRAG:
     def ask(self, question):
         raise AssertionError("RAG must not be called when grounding disabled")
@@ -141,6 +146,20 @@ def test_run_stages_nasa_failure_yields_location_error(monkeypatch, pipeline):
     assert results[-1].kind == "error"
     assert results[-1].payload["stage"] == "location"
     assert "NASA" in results[-1].payload["error"]
+
+
+def test_run_stages_llm_failure_degrades_explanation_not_pipeline(pipeline):
+    """LLM quota/service errors must not block numeric results (non-blocking)."""
+    pipeline._explanation = QuotaExhaustedExplanation()
+    results = list(pipeline.run_stages(AnalysisContext(lat=26.9, lon=75.8)))
+    result_kinds = [r.kind for r in results]
+    assert "error" not in result_kinds
+    assert result_kinds[-1] == "done"
+    explanation = next(r for r in results if r.kind == "explanation")
+    assert explanation.payload.get("degraded") is True
+    assert "unavailable" in explanation.payload["error"].lower()
+    prediction = next(r for r in results if r.kind == "prediction")
+    assert prediction.payload["prediction"] == 5.5
 
 
 def test_run_stages_infers_india_region(pipeline):

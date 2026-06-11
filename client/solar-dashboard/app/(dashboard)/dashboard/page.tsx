@@ -245,10 +245,14 @@ export default function DashboardPage() {
   );
   const canSaveAnalysis = !!(analysis.state.prediction && analysis.state.financial && analysis.state.explanation);
   const showEmptyState = view === "setup" && !hasResults && !isLoading;
+  // Allow partial results when a late stage (e.g. LLM explanation) failed
+  // but the numeric core (prediction + financial) is present.
+  const hasPartialResults = !!(analysis.state.prediction && analysis.state.financial);
   const canViewResults =
     view === "pipeline" &&
-    hasResults &&
-    (analysis.state.stage === "complete" || analysis.state.stage === "idle");
+    ((hasResults &&
+      (analysis.state.stage === "complete" || analysis.state.stage === "idle")) ||
+      (analysis.state.stage === "error" && hasPartialResults));
   const shouldGuardExit = view === "results" && hasResults && !hasSavedAnalysis;
 
   const handleSaveAnalysis = useCallback((name: string) => {

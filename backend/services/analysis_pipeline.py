@@ -309,6 +309,18 @@ class AnalysisPipeline:
                 explanation = {
                     "error": "Explanation unavailable — GEMINI_API_KEY not set."
                 }
+            except Exception as exc:
+                # LLM failures (quota exhausted, network, service errors) must
+                # never block numeric results — degrade the explanation only.
+                logger.warning("Explanation stage degraded: %s", exc)
+                explanation = {
+                    "error": (
+                        "Explanation temporarily unavailable (LLM quota or "
+                        "service error). Prediction and financial results "
+                        "are unaffected."
+                    ),
+                    "degraded": True,
+                }
             yield StageResult("explanation", explanation)
             yield StageResult("done", {"status": "complete"})
 
