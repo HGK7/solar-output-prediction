@@ -10,6 +10,7 @@ import { PredictionCard } from "@/components/prediction-card";
 import { FinancialCard } from "@/components/financial-card";
 import { OutputChart } from "@/components/output-chart";
 import { ExplanationPanel } from "@/components/explanation-panel";
+import { WhatIfPanel } from "@/components/what-if-panel";
 import type { StreamingState } from "@/lib/use-streaming-analysis";
 
 interface ResultsViewProps {
@@ -114,6 +115,8 @@ export function ResultsView({
             }
           />
         </div>
+
+        <WhatIfPanel prediction={analysis.prediction} baseline={analysis.financial} />
 
         {(analysis.physicsSimulation || analysis.stage === "physics") && (
           <Card className="glass-card">

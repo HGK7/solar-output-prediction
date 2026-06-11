@@ -5,6 +5,7 @@ Endpoints:
     POST /predict      – Deterministic ML prediction (no LLM)
     POST /explain      – LLM explanation of a prediction
     POST /ask          – RAG-grounded domain Q&A
+    POST /what-if      – Deterministic financial re-simulation (no ML/LLM re-run)
     POST /analyze      – Full pipeline: location → prediction → financial → explanation
     GET  /stream-plan  – SSE streamed full analysis pipeline
     GET  /health       – Readiness probe
@@ -192,6 +193,36 @@ def create_app() -> Flask:
         except Exception as exc:
             logger.error("RAG query failed: %s\n%s", exc, traceback.format_exc())
             return jsonify({"error": f"RAG query failed: {exc}"}), 500
+
+    @application.route("/what-if", methods=["POST"])
+    def what_if():
+        """Deterministic financial re-simulation for what-if sliders.
+
+        No ML re-run, no LLM — recomputes financial metrics from an existing
+        irradiance prediction with adjusted system parameters (ADR-0001 safe).
+        """
+        try:
+            payload = request.get_json(force=True)
+            irradiance = payload.get("predicted_irradiance_kwh_m2_day")
+            if not isinstance(irradiance, (int, float)) or irradiance <= 0:
+                return (
+                    jsonify(
+                        {
+                            "error": "Missing or invalid "
+                            "'predicted_irradiance_kwh_m2_day'."
+                        }
+                    ),
+                    400,
+                )
+            overrides = dict(payload.get("financial_overrides", {}))
+            result = financial_service.calculate(
+                predicted_irradiance_kwh_m2_day=float(irradiance),
+                overrides=overrides,
+            )
+            return jsonify({"financial": result})
+        except Exception as exc:
+            logger.error("What-if failed: %s\n%s", exc, traceback.format_exc())
+            return jsonify({"error": "What-if simulation failed."}), 500
 
     @application.route("/analyze", methods=["POST"])
     def analyze():

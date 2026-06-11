@@ -176,6 +176,29 @@ export function streamPlan(
   };
 }
 
+// ── What-if (deterministic financial re-simulation) ──
+
+export async function whatIf(
+  predictedIrradianceKwhM2Day: number,
+  financialOverrides: Record<string, unknown>,
+): Promise<{ financial: import("@/types").FinancialSummary }> {
+  const res = await fetch(`${API_BASE}/what-if`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      predicted_irradiance_kwh_m2_day: predictedIrradianceKwhM2Day,
+      financial_overrides: financialOverrides,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: "What-if simulation failed." }));
+    throw new Error(err.error ?? "What-if simulation failed.");
+  }
+
+  return res.json();
+}
+
 // ── RAG Q&A ──
 
 export class RAGUnavailableError extends Error {
