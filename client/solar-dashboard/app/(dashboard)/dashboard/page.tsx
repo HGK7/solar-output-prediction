@@ -524,6 +524,8 @@ export default function DashboardPage() {
       {view === "results" && (
         <ResultsView
           analysis={analysis.state}
+          lat={workspace.state.lat}
+          lon={workspace.state.lon}
           locationsCount={locations.length}
           saveDialogOpen={saveDialogOpen}
           saveName={saveName}

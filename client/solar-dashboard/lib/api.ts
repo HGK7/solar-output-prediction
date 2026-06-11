@@ -199,6 +199,33 @@ export async function whatIf(
   return res.json();
 }
 
+// ── Recommendations (deterministic) ──
+
+export async function getRecommendations(params: {
+  predictedIrradianceKwhM2Day: number;
+  financialOverrides?: Record<string, unknown>;
+  lat?: number | null;
+  lon?: number | null;
+}): Promise<{ recommendations: import("@/types").Recommendation[] }> {
+  const res = await fetch(`${API_BASE}/recommendations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      predicted_irradiance_kwh_m2_day: params.predictedIrradianceKwhM2Day,
+      financial_overrides: params.financialOverrides ?? {},
+      lat: params.lat ?? undefined,
+      lon: params.lon ?? undefined,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: "Recommendations failed." }));
+    throw new Error(err.error ?? "Recommendations failed.");
+  }
+
+  return res.json();
+}
+
 // ── RAG Q&A ──
 
 export class RAGUnavailableError extends Error {

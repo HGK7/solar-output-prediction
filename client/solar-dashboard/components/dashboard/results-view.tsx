@@ -11,10 +11,13 @@ import { FinancialCard } from "@/components/financial-card";
 import { OutputChart } from "@/components/output-chart";
 import { ExplanationPanel } from "@/components/explanation-panel";
 import { WhatIfPanel } from "@/components/what-if-panel";
+import { RecommendationsCard } from "@/components/recommendations-card";
 import type { StreamingState } from "@/lib/use-streaming-analysis";
 
 interface ResultsViewProps {
   analysis: StreamingState;
+  lat: number | null;
+  lon: number | null;
   locationsCount: number;
   saveDialogOpen: boolean;
   saveName: string;
@@ -33,6 +36,8 @@ interface ResultsViewProps {
 
 export function ResultsView({
   analysis,
+  lat,
+  lon,
   locationsCount,
   saveDialogOpen,
   saveName,
@@ -115,6 +120,13 @@ export function ResultsView({
             }
           />
         </div>
+
+        <RecommendationsCard
+          prediction={analysis.prediction}
+          financial={analysis.financial}
+          lat={lat}
+          lon={lon}
+        />
 
         <WhatIfPanel prediction={analysis.prediction} baseline={analysis.financial} />
 

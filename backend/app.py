@@ -29,6 +29,7 @@ from services.financial_service import FinancialService
 from services.physics_simulation_service import PhysicsSimulationService
 from services.solar_geometry_service import SolarGeometryService
 from services.analysis_pipeline import AnalysisContext, AnalysisPipeline
+from services.recommendation_service import RecommendationService
 from utils.validation import ValidationError
 from utils.logging import logger
 
@@ -51,6 +52,11 @@ def create_app() -> Flask:
     financial_service = FinancialService()
     physics_service = PhysicsSimulationService()
     geometry_service = SolarGeometryService()
+
+    recommendation_service = RecommendationService(
+        financial_service=financial_service,
+        geometry_service=geometry_service,
+    )
 
     pipeline = AnalysisPipeline(
         nasa_service=nasa_service,
@@ -223,6 +229,37 @@ def create_app() -> Flask:
         except Exception as exc:
             logger.error("What-if failed: %s\n%s", exc, traceback.format_exc())
             return jsonify({"error": "What-if simulation failed."}), 500
+
+    @application.route("/recommendations", methods=["POST"])
+    def recommendations():
+        """Deterministic site recommendations from an existing prediction."""
+        try:
+            payload = request.get_json(force=True)
+            irradiance = payload.get("predicted_irradiance_kwh_m2_day")
+            if not isinstance(irradiance, (int, float)) or irradiance <= 0:
+                return (
+                    jsonify(
+                        {
+                            "error": "Missing or invalid "
+                            "'predicted_irradiance_kwh_m2_day'."
+                        }
+                    ),
+                    400,
+                )
+            lat = payload.get("lat")
+            lon = payload.get("lon")
+            result = recommendation_service.build(
+                predicted_irradiance_kwh_m2_day=float(irradiance),
+                financial_overrides=dict(payload.get("financial_overrides", {})),
+                lat=float(lat) if lat is not None else None,
+                lon=float(lon) if lon is not None else None,
+            )
+            return jsonify({"recommendations": result})
+        except Exception as exc:
+            logger.error(
+                "Recommendations failed: %s\n%s", exc, traceback.format_exc()
+            )
+            return jsonify({"error": "Recommendations failed."}), 500
 
     @application.route("/analyze", methods=["POST"])
     def analyze():

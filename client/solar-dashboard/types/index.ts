@@ -250,6 +250,16 @@ export interface AnalysisResult {
   data_provenance?: DataProvenance;
 }
 
+// ── Recommendations ──
+
+export interface Recommendation {
+  id: string;
+  title: string;
+  detail: string;
+  metrics: Record<string, string | number>;
+  source_document: string;
+}
+
 // ── RAG Chatbot ──
 
 export interface RAGCitation {
