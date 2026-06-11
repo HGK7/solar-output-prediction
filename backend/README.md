@@ -72,8 +72,17 @@ gunicorn -c gunicorn.conf.py app:app
 | Variable | Render default | Purpose |
 | -------- | -------------- | ------- |
 | `PHYSICS_MODE` | `analytical` | Skip PySAM (~200+ MB). Use `pysam` only on paid tier + `requirements-dev.txt` |
-| `ENABLE_RAG_GROUNDING` | `false` | Skip HuggingFace+Chroma on `/analyze` |
+| `ENABLE_RAG_GROUNDING` | `false` | Skip Gemini-embed + Chroma on `/analyze` |
 | `REQUIRE_PRETRAINED_MODELS` | `true` | No train-on-first-request OOM |
+
+Render omits `requirements-rag.txt` at build. `/ask` returns 503 until RAG extras installed.
+
+**RAG re-ingest (Gemini embeddings):** after `pip install -r requirements-rag.txt` and setting `GEMINI_API_KEY`:
+
+```bash
+python scripts/ingest_science_docs.py   # PDFs → chroma_db/
+# or ingest markdown: python -c "from rag.ingest import ingest_documents; from rag.vectorstore import VectorStore; ingest_documents(VectorStore())"
+```
 
 Local full profile: `pip install -r requirements-dev.txt` and `PHYSICS_MODE=pysam`.
 

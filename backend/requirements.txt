@@ -15,13 +15,9 @@ joblib>=1.4,<2.0
 
 # --- LLM (explanation only; lazy if key missing) ---
 google-genai>=1.0,<2.0
-langchain-google-genai>=4.2,<5.0
 
-# --- RAG (lazy-loaded on /ask or when ENABLE_RAG_GROUNDING=true) ---
-chromadb>=1.3.5,<2.0
-sentence-transformers>=3.3,<4.0
-langchain-chroma>=1.0,<2.0
-langchain-huggingface>=1.0,<2.0
+# RAG (chromadb, Gemini embeddings API) → requirements-rag.txt
+# Render prod omits RAG; /ask returns 503 until RAG extras installed
 
 # --- HTTP & Caching ---
 requests>=2.32,<3.0

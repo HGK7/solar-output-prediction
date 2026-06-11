@@ -26,7 +26,11 @@ class Config:
     MODEL_DIR: str = os.path.join(BASE_DIR, "trained_models")
 
     # --- RAG / Vector Store ---
-    EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
+    # Gemini embedding API — no local torch (see ADR-0003)
+    EMBEDDING_MODEL: str = os.getenv(
+        "EMBEDDING_MODEL", "models/gemini-embedding-001"
+    )
+    CHROMA_COLLECTION: str = os.getenv("CHROMA_COLLECTION", "solar_science_gemini")
     DOCUMENTS_DIR: str = os.path.join(BASE_DIR, "rag", "documents")
     CHUNK_SIZE: int = 500
     CHUNK_OVERLAP: int = 50
@@ -35,7 +39,7 @@ class Config:
     # --- Memory / deployment profile (Render free tier) ---
     # analytical = lightweight PSH math (default); pysam = NREL PVWatts; off = skip
     PHYSICS_MODE: str = os.getenv("PHYSICS_MODE", "analytical").lower()
-    # When false, /analyze skips HuggingFace+Chroma grounding (saves ~150–300 MB)
+    # When false, /analyze skips Gemini-embed + Chroma grounding
     ENABLE_RAG_GROUNDING: bool = (
         os.getenv("ENABLE_RAG_GROUNDING", "false").lower() == "true"
     )

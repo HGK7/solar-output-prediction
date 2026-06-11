@@ -8,19 +8,17 @@ from typing import TYPE_CHECKING
 from config import Config
 from utils.logging import logger
 
+from services.rag_embeddings import create_rag_embeddings
+
 if TYPE_CHECKING:
     from langchain_chroma import Chroma
     from langchain_google_genai import ChatGoogleGenerativeAI
-    from langchain_huggingface import HuggingFaceEmbeddings
 
 _PROMPT_DIR = os.path.join(Config.BASE_DIR, "prompts")
 
-PUBLIC_SOURCE_LINKS = {
-    "solar_fundamentals.md": "https://power.larc.nasa.gov/docs/services/api/temporal/daily/",
-    "solar_panel_efficiency.md": "https://www.nrel.gov/pv/module-performance.html",
-    "weather_impact.md": "https://www.nrel.gov/grid/solar-resource/",
-    "bhadla_solar_park.md": "https://en.wikipedia.org/wiki/Bhadla_Solar_Park",
-}
+def _citation_link(_source_name: str) -> str | None:
+    """Indexed docs are viewed in-dashboard via GET /rag/documents/."""
+    return None
 
 
 class RAGService:
@@ -38,15 +36,20 @@ class RAGService:
         if self._vectorstore is not None and self._retriever is not None:
             return
 
-        from langchain_chroma import Chroma
-        from langchain_google_genai import ChatGoogleGenerativeAI
-        from langchain_huggingface import HuggingFaceEmbeddings
+        try:
+            from langchain_chroma import Chroma
+            from langchain_google_genai import ChatGoogleGenerativeAI
+        except ImportError as exc:
+            raise RuntimeError(
+                "RAG dependencies not installed. "
+                "Run: pip install -r requirements-rag.txt"
+            ) from exc
 
-        self._embeddings = HuggingFaceEmbeddings(model_name=Config.EMBEDDING_MODEL)
+        self._embeddings = create_rag_embeddings()
         self._vectorstore = Chroma(
             persist_directory=self._persist_dir,
             embedding_function=self._embeddings,
-            collection_name="solar_science",
+            collection_name=Config.CHROMA_COLLECTION,
         )
         self._retriever = self._vectorstore.as_retriever(
             search_kwargs={"k": Config.RAG_TOP_K}
@@ -85,7 +88,7 @@ class RAGService:
                 if isinstance(page, int)
                 else (str(metadata_section) if metadata_section else "")
             )
-            source_link = PUBLIC_SOURCE_LINKS.get(source_name)
+            source_link = _citation_link(source_name)
             context_parts.append(
                 f"[Source {i}: {source_name}{f' | {section}' if section else ''}]\n{doc.page_content}"
             )

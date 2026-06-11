@@ -1,5 +1,6 @@
 # Optional dependencies — local dev, ingest scripts, full physics profile
 -r requirements.txt
+-r requirements-rag.txt
 
 # --- Physics (heavy — set PHYSICS_MODE=pysam) ---
 NREL-PySAM>=5.1,<6.0

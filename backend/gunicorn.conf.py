@@ -2,9 +2,9 @@
 # Start with: gunicorn app:app
 #
 # Memory-optimised for Render free tier (512 MB RAM).
-# Heavy dependencies (sentence-transformers, ChromaDB) are lazy-loaded,
+# Heavy dependencies (ChromaDB, langchain-google-genai) are lazy-loaded,
 # so a single worker can serve prediction/explain requests immediately
-# while RAG loads only on first /ask call.
+# RAG loads only on first /ask when requirements-rag.txt is installed.
 
 import os
 

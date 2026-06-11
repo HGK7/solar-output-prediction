@@ -6,10 +6,18 @@ import argparse
 import os
 from pathlib import Path
 
+import sys
+
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
 from langchain_chroma import Chroma
 from langchain_community.document_loaders import PyPDFDirectoryLoader
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+from config import Config
+from services.rag_embeddings import create_rag_embeddings
 
 
 def resolve_science_dir(input_dir: str) -> Path:
@@ -30,9 +38,9 @@ def resolve_science_dir(input_dir: str) -> Path:
 def ingest_science_docs(
     source_dir: Path,
     persist_directory: Path,
-    embedding_model: str,
     chunk_size: int,
     chunk_overlap: int,
+    collection_name: str,
 ) -> int:
     loader = PyPDFDirectoryLoader(str(source_dir), glob="**/*.pdf")
     docs = loader.load()
@@ -45,7 +53,7 @@ def ingest_science_docs(
     )
     chunks = splitter.split_documents(docs)
 
-    embeddings = HuggingFaceEmbeddings(model_name=embedding_model)
+    embeddings = create_rag_embeddings()
 
     persist_directory.mkdir(parents=True, exist_ok=True)
 
@@ -53,7 +61,7 @@ def ingest_science_docs(
         documents=chunks,
         embedding=embeddings,
         persist_directory=str(persist_directory),
-        collection_name="solar_science",
+        collection_name=collection_name,
     )
 
     return len(chunks)
@@ -69,7 +77,11 @@ def main() -> None:
     parser.add_argument(
         "--db", default="chroma_db", help="Path to Chroma persistence directory"
     )
-    parser.add_argument("--embedding-model", default="all-MiniLM-L6-v2")
+    parser.add_argument(
+        "--collection",
+        default=Config.CHROMA_COLLECTION,
+        help="Chroma collection name (must match RAGService)",
+    )
     parser.add_argument("--chunk-size", type=int, default=1000)
     parser.add_argument("--chunk-overlap", type=int, default=200)
     args = parser.parse_args()
@@ -85,9 +97,9 @@ def main() -> None:
     chunk_count = ingest_science_docs(
         source_dir=source_dir,
         persist_directory=persist_dir,
-        embedding_model=args.embedding_model,
         chunk_size=args.chunk_size,
         chunk_overlap=args.chunk_overlap,
+        collection_name=args.collection,
     )
 
     print(f"Indexed {chunk_count} chunks from {source_dir} into {persist_dir}")
