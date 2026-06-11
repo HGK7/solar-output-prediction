@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { BackendStatusProvider } from "@/lib/backend-status-context";
+import { GuestPreferencesProvider } from "@/lib/guest-preferences-context";
 
 const inter = Inter({
   variable: "--font-sans",
@@ -22,11 +23,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.variable} font-sans antialiased`}>
-        <BackendStatusProvider>
-          <div className="flex h-dvh flex-col overflow-x-hidden overflow-y-auto bg-linear-to-br from-yellow-50 via-sky-50 to-white">
-            <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">{children}</div>
-          </div>
-        </BackendStatusProvider>
+        <GuestPreferencesProvider>
+          <BackendStatusProvider>
+            <div className="flex h-dvh flex-col overflow-x-hidden overflow-y-auto bg-linear-to-br from-yellow-50 via-sky-50 to-white">
+              <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">{children}</div>
+            </div>
+          </BackendStatusProvider>
+        </GuestPreferencesProvider>
       </body>
     </html>
   );

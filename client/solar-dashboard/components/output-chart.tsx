@@ -16,6 +16,7 @@ import {
   Legend,
 } from "recharts";
 import type { MonthlyData } from "@/types";
+import { useGuestPreferencesContext } from "@/lib/guest-preferences-context";
 
 interface OutputChartProps {
   monthly: Record<string, MonthlyData> | null;
@@ -28,6 +29,8 @@ const MONTHS_ORDER = [
 ];
 
 export function OutputChart({ monthly, isLoading }: OutputChartProps) {
+  const { convertTemperature, temperatureUnit } = useGuestPreferencesContext();
+
   if (isLoading) {
     return (
       <Card className="glass-card border-amber-200/40 bg-white/80">
@@ -53,7 +56,7 @@ export function OutputChart({ monthly, isLoading }: OutputChartProps) {
       "Clear Sky": Number(clearSky.toFixed(2)),
       "Cloud Loss": Number((clearSky - solar).toFixed(2)),
       "Efficiency": clearSky > 0 ? Number(((solar / clearSky) * 100).toFixed(1)) : 0,
-      Temperature: Number(temp.toFixed(1)),
+      Temperature: Number(convertTemperature(temp).toFixed(1)),
     };
   });
 
@@ -93,7 +96,7 @@ export function OutputChart({ monthly, isLoading }: OutputChartProps) {
               tick={{ fontSize: 12 }}
               stroke="var(--muted-foreground)"
               label={{
-                value: "°C",
+                value: temperatureUnit,
                 angle: 90,
                 position: "insideRight",
                 style: { fontSize: 11, fill: "var(--muted-foreground)" },
@@ -107,7 +110,7 @@ export function OutputChart({ monthly, isLoading }: OutputChartProps) {
                     <p className="font-medium text-foreground">{label}</p>
                     {payload.map((entry) => {
                       let unit = "kWh/m²/day";
-                      if (entry.name === "Temperature") unit = "°C";
+                      if (entry.name === "Temperature") unit = temperatureUnit;
                       if (entry.name === "Cloud Loss") unit = "kWh/m²/day";
                       if (entry.name === "Efficiency") unit = "%";
                       return (

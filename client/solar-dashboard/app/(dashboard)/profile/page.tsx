@@ -11,10 +11,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { useGuestPreferences } from "@/lib/use-guest-preferences";
+import { useGuestPreferencesContext } from "@/lib/guest-preferences-context";
 
 export default function ProfilePage() {
-  const { preferences, update } = useGuestPreferences();
+  const { preferences, update } = useGuestPreferencesContext();
 
   return (
     <div className="space-y-6 py-6">

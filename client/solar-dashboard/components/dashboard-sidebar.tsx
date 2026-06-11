@@ -6,9 +6,11 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   ArrowLeft,
   ChartNoAxesCombined,
+  Download,
   Loader2,
   LayoutDashboard,
   MapPin,
+  PlusCircle,
   Settings,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -190,7 +192,28 @@ export function DashboardSidebar() {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                {/* Reserved for future quick actions */}
+                <SidebarMenuButton asChild tooltip="New analysis" className="rounded-xl">
+                  <Link
+                    href="/dashboard"
+                    onClick={(event) => onNavigateAttempt(event, "/dashboard")}
+                    className={isAnalysisRunning ? "pointer-events-none opacity-50" : ""}
+                  >
+                    <PlusCircle className="h-4 w-4" />
+                    <span>New analysis</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild tooltip="Export portfolio CSV" className="rounded-xl">
+                  <Link
+                    href="/analytics"
+                    onClick={(event) => onNavigateAttempt(event, "/analytics")}
+                    className={isAnalysisRunning ? "pointer-events-none opacity-50" : ""}
+                  >
+                    <Download className="h-4 w-4" />
+                    <span>Portfolio export</span>
+                  </Link>
+                </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>

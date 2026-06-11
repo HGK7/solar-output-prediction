@@ -125,7 +125,7 @@ function DashboardPreview() {
               <p className="text-lg font-semibold text-foreground">Almeria South Field</p>
             </div>
             <Badge variant="secondary" className="rounded-full px-3 py-1 text-[10px] uppercase tracking-[0.2em]">
-              24.8% gain
+              Sample data
             </Badge>
           </div>
 
