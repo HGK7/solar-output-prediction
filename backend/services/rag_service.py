@@ -60,8 +60,13 @@ class RAGService:
             temperature=Config.LLM_TEMPERATURE,
         )
 
-    def ask(self, question: str) -> dict:
-        """Answer a natural-language question using retrieved scientific context."""
+    def ask(self, question: str, context: str | None = None) -> dict:
+        """Answer a natural-language question using retrieved scientific context.
+
+        `context` is an optional user-site summary (location, prediction,
+        system config). It is appended to the question for the LLM only —
+        retrieval stays driven by the question itself.
+        """
         if not Config.GEMINI_API_KEY:
             raise RuntimeError(
                 "GEMINI_API_KEY is not configured. Set it in your .env file to enable RAG."
@@ -111,7 +116,16 @@ class RAGService:
             )
 
         context_text = "\n\n---\n\n".join(context_parts)
-        prompt = self._prompt_template.format(context=context_text, question=question)
+        question_for_llm = question
+        if context:
+            question_for_llm = (
+                f"{question}\n\n"
+                f"(User's current site for reference — do not invent numbers "
+                f"beyond these: {context})"
+            )
+        prompt = self._prompt_template.format(
+            context=context_text, question=question_for_llm
+        )
 
         logger.info("RAG ask via LangChain retriever (sources=%d)", len(docs))
         response = self._llm.invoke(prompt)

@@ -96,6 +96,28 @@ export default function DashboardPage() {
     }
   }, [analysis.state.stage, view]);
 
+  // Compact site summary forwarded with chatbot questions for grounded answers
+  const buildSiteContext = useCallback(() => {
+    const parts: string[] = [];
+    const { lat, lon, systemConfig } = workspace.state;
+    if (lat !== null && lon !== null) {
+      parts.push(`location ${lat.toFixed(2)}, ${lon.toFixed(2)}`);
+    }
+    parts.push(`system ${systemConfig.systemCapacityKw} kW ${systemConfig.panelTechnology} ${systemConfig.installationType}`);
+    const prediction = analysis.state.prediction;
+    if (prediction?.prediction != null) {
+      parts.push(`predicted irradiance ${prediction.prediction} ${prediction.unit ?? "kWh/m²/day"}`);
+    }
+    const financial = analysis.state.financial;
+    if (financial?.annual_output_kwh != null) {
+      parts.push(`annual output ${financial.annual_output_kwh} kWh`);
+    }
+    if (financial?.simple_payback_years != null) {
+      parts.push(`payback ${financial.simple_payback_years} years`);
+    }
+    return parts.join("; ");
+  }, [workspace.state, analysis.state.prediction, analysis.state.financial]);
+
   // Fallback POST /analyze handler
   const handleStreamFailure = useCallback(async () => {
     try {
@@ -526,7 +548,7 @@ export default function DashboardPage() {
         <p>Estimates use long-term climate averages and standard cost models. Site conditions still apply.</p>
       </div>
 
-      {view === "results" && <Chatbot />}
+      {view === "results" && <Chatbot siteContext={buildSiteContext()} />}
     </div>
   );
 }

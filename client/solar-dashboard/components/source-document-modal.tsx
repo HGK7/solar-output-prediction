@@ -42,6 +42,7 @@ export function SourceDocumentModal({
       return;
     }
 
+    const docName = filename;
     let cancelled = false;
     let objectUrl: string | null = null;
 
@@ -52,7 +53,7 @@ export function SourceDocumentModal({
       setPdfUrl(null);
 
       try {
-        const doc = await fetchSourceDocument(filename);
+        const doc = await fetchSourceDocument(docName);
         if (cancelled) return;
 
         if (doc.format === "pdf") {

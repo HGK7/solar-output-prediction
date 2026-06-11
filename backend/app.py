@@ -184,7 +184,8 @@ def create_app() -> Flask:
                 return jsonify({"error": "Missing 'question' field."}), 400
             if len(question) > 1000:
                 return jsonify({"error": "Question exceeds 1000 characters."}), 400
-            answer = rag_service.ask(question)
+            context = str(payload.get("context") or "").strip()[:600] or None
+            answer = rag_service.ask(question, context=context)
             return jsonify(answer)
         except RuntimeError as exc:
             return jsonify({"error": str(exc)}), 503

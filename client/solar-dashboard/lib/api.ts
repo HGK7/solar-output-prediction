@@ -178,12 +178,26 @@ export function streamPlan(
 
 // ── RAG Q&A ──
 
-export async function askQuestion(question: string): Promise<RAGResponse> {
+export class RAGUnavailableError extends Error {
+  constructor(message = "Knowledge base is offline.") {
+    super(message);
+    this.name = "RAGUnavailableError";
+  }
+}
+
+export async function askQuestion(
+  question: string,
+  context?: string,
+): Promise<RAGResponse> {
   const res = await fetch(`${API_BASE}/ask`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify(context ? { question, context } : { question }),
   });
+
+  if (res.status === 503) {
+    throw new RAGUnavailableError();
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: "Failed to get answer." }));
