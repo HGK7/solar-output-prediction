@@ -238,9 +238,9 @@ export interface PortfolioSitePayload {
 }
 
 export interface PortfolioInsightsResponse {
-  headline: string;
+  summary: string;
   highlights: string[];
-  watch_out: string | null;
+  watchouts: string[];
   stats: Record<string, unknown>;
 }
 

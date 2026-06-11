@@ -8,11 +8,13 @@ LLM pre-labelled.
 """
 
 import json
+import os
 
 from config import Config
 from utils.logging import logger
 
 _MAX_SITES = 25
+_PROMPT_DIR = os.path.join(Config.BASE_DIR, "prompts")
 
 _SYSTEM_INSTRUCTION = (
     "You are a solar portfolio analyst. You receive pre-computed metrics for "
@@ -21,27 +23,15 @@ _SYSTEM_INSTRUCTION = (
     "valid JSON matching the requested schema."
 )
 
-_PROMPT_TEMPLATE = """Summarize this solar site portfolio for the dashboard.
-
-## Pre-computed portfolio metrics (the only numbers you may use)
-{portfolio_json}
-
-## Output JSON schema (strict)
-{{
-  "headline": "One-sentence portfolio takeaway (max 160 chars).",
-  "highlights": [
-    "2-4 short bullet insights comparing sites, each citing only the numbers above."
-  ],
-  "watch_out": "One short caution or null if nothing stands out."
-}}
-"""
-
 
 class PortfolioInsightsService:
     """Grounded LLM commentary over deterministic portfolio stats."""
 
     def __init__(self):
         self._client = None
+        prompt_path = os.path.join(_PROMPT_DIR, "portfolio_insights_prompt.txt")
+        with open(prompt_path, "r", encoding="utf-8") as f:
+            self._prompt_template = f.read()
 
     def _get_client(self):
         if self._client is None:
@@ -66,8 +56,10 @@ class PortfolioInsightsService:
         client = self._get_client()
         from google.genai import types
 
-        prompt = _PROMPT_TEMPLATE.format(
-            portfolio_json=json.dumps(stats, indent=2)
+        aggregates = {k: v for k, v in stats.items() if k != "sites"}
+        prompt = self._prompt_template.format(
+            aggregates=json.dumps(aggregates, indent=2),
+            sites=json.dumps(stats["sites"], indent=2),
         )
         logger.info("Portfolio insights for %d sites", len(cleaned))
         response = client.models.generate_content(
@@ -158,19 +150,19 @@ class PortfolioInsightsService:
         except json.JSONDecodeError:
             logger.warning("Portfolio insights returned non-JSON; wrapping.")
             return {
-                "headline": text[:160],
+                "summary": text[:400],
                 "highlights": [],
-                "watch_out": None,
+                "watchouts": [],
                 "raw_response": True,
             }
-        parsed.setdefault("headline", "")
-        parsed.setdefault("highlights", [])
-        parsed.setdefault("watch_out", None)
-        if isinstance(parsed["highlights"], list):
-            parsed["highlights"] = [
-                " ".join(str(h).split())[:220] for h in parsed["highlights"][:4]
-            ]
-        else:
-            parsed["highlights"] = []
-        parsed["headline"] = " ".join(str(parsed["headline"]).split())[:200]
+
+        def _clean_list(value) -> list[str]:
+            if not isinstance(value, list):
+                return []
+            return [" ".join(str(item).split())[:220] for item in value[:3]]
+
+        parsed.setdefault("summary", "")
+        parsed["summary"] = " ".join(str(parsed["summary"]).split())[:500]
+        parsed["highlights"] = _clean_list(parsed.get("highlights"))
+        parsed["watchouts"] = _clean_list(parsed.get("watchouts"))
         return parsed
