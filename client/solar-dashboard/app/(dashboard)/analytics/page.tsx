@@ -28,6 +28,9 @@ import { useAnalyticsFilters } from "@/lib/analytics-context";
 import { AnalyticsFilterPanel } from "@/components/analytics-filter-panel";
 import { AnalyticsComparisonView } from "@/components/analytics-comparison-view";
 import { PortfolioInsightsCard } from "@/components/portfolio-insights-card";
+import { PortfolioForecastChart } from "@/components/portfolio-forecast-chart";
+import { downloadRunsCsv } from "@/lib/export-csv";
+import { Download } from "lucide-react";
 
 const chartConfig = {
   output: {
@@ -215,14 +218,24 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-6 py-6">
-      <header className="space-y-2">
-        <h1 className="text-2xl font-semibold text-foreground md:text-3xl">Portfolio analytics</h1>
-        <p className="text-sm text-muted-foreground">
-          Portfolio intelligence from {filteredAndAnalyzed.analyzedLocations} analyzed location{filteredAndAnalyzed.analyzedLocations !== 1 ? "s" : ""}
-          {filteredAndAnalyzed.totalLocations > filteredAndAnalyzed.analyzedLocations
-            ? ` (${filteredAndAnalyzed.totalLocations} total tracked)`
-            : ""}.
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-2">
+          <h1 className="text-2xl font-semibold text-foreground md:text-3xl">Portfolio analytics</h1>
+          <p className="text-sm text-muted-foreground">
+            Portfolio intelligence from {filteredAndAnalyzed.analyzedLocations} analyzed location{filteredAndAnalyzed.analyzedLocations !== 1 ? "s" : ""}
+            {filteredAndAnalyzed.totalLocations > filteredAndAnalyzed.analyzedLocations
+              ? ` (${filteredAndAnalyzed.totalLocations} total tracked)`
+              : ""}.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => downloadRunsCsv(filteredAndAnalyzed.filteredLocations)}
+        >
+          <Download className="h-4 w-4 mr-1.5" />
+          Export CSV
+        </Button>
       </header>
 
       <Card className="glass-card border-sky-200/40 bg-white/85">
@@ -239,6 +252,8 @@ export default function AnalyticsPage() {
       </Card>
 
       <PortfolioInsightsCard sites={filteredAndAnalyzed.insightSites} />
+
+      <PortfolioForecastChart locations={filteredAndAnalyzed.filteredLocations} />
 
       <AnalyticsFilterPanel />
 
