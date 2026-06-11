@@ -7,6 +7,7 @@ __pycache__/
 # Research / data artifacts (not needed in production package)
 *.ipynb
 *.csv
+*.log
 chroma_db/
 
 # Committed training data for Render build (small climatology CSV)

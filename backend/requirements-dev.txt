@@ -2,6 +2,9 @@
 -r requirements.txt
 -r requirements-rag.txt
 
+# --- Testing ---
+pytest>=8.0,<9.0
+
 # --- Physics (heavy — set PHYSICS_MODE=pysam) ---
 NREL-PySAM>=5.1,<6.0
 

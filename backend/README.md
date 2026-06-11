@@ -15,13 +15,16 @@ gunicorn app:app              # production
 
 ## API Endpoints
 
-| Method | Path       | Description                         |
-| ------ | ---------- | ----------------------------------- |
-| GET    | `/health`  | Readiness probe                     |
-| POST   | `/predict` | Deterministic ML prediction         |
-| POST   | `/explain` | LLM-generated explanation           |
-| POST   | `/ask`     | RAG-grounded domain Q&A             |
-| GET    | `/stream`  | SSE streamed prediction+explanation |
+| Method | Path                        | Description                              |
+| ------ | --------------------------- | ---------------------------------------- |
+| GET    | `/health`                   | Readiness probe (models, RAG chunks)     |
+| POST   | `/predict`                  | Deterministic ML prediction              |
+| POST   | `/explain`                  | LLM-generated explanation                |
+| POST   | `/ask`                      | RAG-grounded domain Q&A                  |
+| POST   | `/analyze`                  | Full pipeline (location → … → explain)   |
+| GET    | `/stream-plan`              | Same pipeline as SSE stream              |
+| GET    | `/rag/documents`            | List indexed knowledge-base docs         |
+| GET    | `/rag/documents/<filename>` | Serve doc for dashboard source modal     |
 
 ### POST /predict
 
@@ -80,11 +83,31 @@ Render omits `requirements-rag.txt` at build. `/ask` returns 503 until RAG extra
 **RAG re-ingest (Gemini embeddings):** after `pip install -r requirements-rag.txt` and setting `GEMINI_API_KEY`:
 
 ```bash
-python scripts/ingest_science_docs.py   # PDFs → chroma_db/
-# or ingest markdown: python -c "from rag.ingest import ingest_documents; from rag.vectorstore import VectorStore; ingest_documents(VectorStore())"
+python scripts/ingest_markdown_docs.py  # rag/documents/*.md → chroma_db/ (idempotent, wipes + re-ingests)
+python scripts/ingest_science_docs.py   # optional: science_context PDFs → chroma_db/
 ```
 
 Local full profile: `pip install -r requirements-dev.txt` and `PHYSICS_MODE=pysam`.
+
+## Tests
+
+```bash
+pip install -r requirements-dev.txt   # includes pytest
+pytest tests -q
+```
+
+Covers `AnalysisPipeline.run_stages` ordering/error paths and ingest chunking. No network or API key needed.
+
+## RAG smoke checklist (local E2E)
+
+With `ENABLE_RAG_GROUNDING=true` and `GEMINI_API_KEY` in `.env`:
+
+1. `python scripts/ingest_markdown_docs.py` — expect ~82 chunks from 8 docs
+2. `python app.py`, then `GET /health` — `rag_chunks > 0`, `rag_grounding_enabled: true`
+3. `POST /ask {"question": "How does humidity affect solar panel output?"}` — grounded answer, citations include `weather_impact.md`, `is_refusal: false`
+4. `POST /analyze {"lat": 26.9, "lon": 75.8}` — `explanation.rag_pipeline.retrieval_count > 0`, citations populated
+5. `GET /stream-plan?lat=26.9&lon=75.8` — SSE event order: `stage/location/… → geometry → explanation → done`
+6. Dashboard: analyze run → explanation Sources tab → source modal opens markdown via `/rag/documents/<name>`
 
 ## Manual Render setup
 
