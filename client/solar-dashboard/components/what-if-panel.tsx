@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
-import { Loader2, RotateCcw, SlidersHorizontal } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Loader2, Play, RotateCcw, SlidersHorizontal } from "lucide-react";
 import { whatIf } from "@/lib/api";
 import type { FinancialSummary, PredictionResult } from "@/types";
 
@@ -13,10 +14,26 @@ interface WhatIfPanelProps {
   baseline: FinancialSummary | null;
 }
 
-interface SliderState {
-  capacityKw: number;
-  tariffUsd: number;
-  performanceRatio: number;
+interface InputState {
+  capacityKw: string;
+  tariffUsd: string;
+  performanceRatio: string;
+}
+
+const LIMITS = {
+  capacityKw: { min: 0.5, max: 100000 },
+  tariffUsd: { min: 0.01, max: 2 },
+  performanceRatio: { min: 0.5, max: 0.95 },
+} as const;
+
+function parseField(
+  raw: string,
+  limits: { min: number; max: number },
+): number | null {
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return null;
+  if (value < limits.min || value > limits.max) return null;
+  return value;
 }
 
 function formatDelta(
@@ -37,69 +54,69 @@ function formatDelta(
 export function WhatIfPanel({ prediction, baseline }: WhatIfPanelProps) {
   const baselineParams = baseline?.system_parameters;
 
-  const initialSliders = useMemo<SliderState>(
+  const initialInputs = useMemo<InputState>(
     () => ({
-      capacityKw: baselineParams?.capacity_kw ?? 5,
-      tariffUsd: baselineParams?.electricity_tariff_usd_kwh ?? 0.08,
-      performanceRatio: baselineParams?.performance_ratio ?? 0.78,
+      capacityKw: String(baselineParams?.capacity_kw ?? 5),
+      tariffUsd: String(baselineParams?.electricity_tariff_usd_kwh ?? 0.08),
+      performanceRatio: String(baselineParams?.performance_ratio ?? 0.78),
     }),
     [baselineParams],
   );
 
-  const [sliders, setSliders] = useState<SliderState>(initialSliders);
+  const [inputs, setInputs] = useState<InputState>(initialInputs);
   const [result, setResult] = useState<FinancialSummary | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const requestSeq = useRef(0);
 
   useEffect(() => {
-    setSliders(initialSliders);
+    setInputs(initialInputs);
     setResult(null);
-  }, [initialSliders]);
-
-  const isDirty =
-    sliders.capacityKw !== initialSliders.capacityKw ||
-    sliders.tariffUsd !== initialSliders.tariffUsd ||
-    sliders.performanceRatio !== initialSliders.performanceRatio;
-
-  // Debounced deterministic re-simulation on slider change
-  useEffect(() => {
-    if (!prediction || !baselineParams || !isDirty) {
-      setResult(null);
-      setIsLoading(false);
-      return;
-    }
-
-    const seq = ++requestSeq.current;
-    setIsLoading(true);
     setError(null);
-
-    const timer = setTimeout(async () => {
-      try {
-        const response = await whatIf(prediction.prediction, {
-          region: baselineParams.region,
-          panel_efficiency: baselineParams.panel_efficiency,
-          system_capacity_kw: sliders.capacityKw,
-          electricity_tariff_usd: sliders.tariffUsd,
-          performance_ratio: sliders.performanceRatio,
-        });
-        if (requestSeq.current === seq) {
-          setResult(response.financial);
-        }
-      } catch (err) {
-        if (requestSeq.current === seq) {
-          setError(err instanceof Error ? err.message : "Simulation failed.");
-          setResult(null);
-        }
-      } finally {
-        if (requestSeq.current === seq) setIsLoading(false);
-      }
-    }, 400);
-
-    return () => clearTimeout(timer);
-  }, [prediction, baselineParams, sliders, isDirty]);
+  }, [initialInputs]);
 
   if (!prediction || !baseline || !baselineParams) return null;
+
+  const parsed = {
+    capacityKw: parseField(inputs.capacityKw, LIMITS.capacityKw),
+    tariffUsd: parseField(inputs.tariffUsd, LIMITS.tariffUsd),
+    performanceRatio: parseField(inputs.performanceRatio, LIMITS.performanceRatio),
+  };
+  const allValid =
+    parsed.capacityKw !== null &&
+    parsed.tariffUsd !== null &&
+    parsed.performanceRatio !== null;
+
+  const isDirty =
+    inputs.capacityKw !== initialInputs.capacityKw ||
+    inputs.tariffUsd !== initialInputs.tariffUsd ||
+    inputs.performanceRatio !== initialInputs.performanceRatio;
+
+  const runSimulation = async () => {
+    if (!allValid || isLoading) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await whatIf(prediction.prediction, {
+        region: baselineParams.region,
+        panel_efficiency: baselineParams.panel_efficiency,
+        system_capacity_kw: parsed.capacityKw,
+        electricity_tariff_usd: parsed.tariffUsd,
+        performance_ratio: parsed.performanceRatio,
+      });
+      setResult(response.financial);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Simulation failed.");
+      setResult(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const reset = () => {
+    setInputs(initialInputs);
+    setResult(null);
+    setError(null);
+  };
 
   const compared = result ?? baseline;
 
@@ -157,6 +174,36 @@ export function WhatIfPanel({ prediction, baseline }: WhatIfPanelProps) {
     },
   ];
 
+  const fields: Array<{
+    key: keyof InputState;
+    label: string;
+    step: string;
+    hint: string;
+    invalid: boolean;
+  }> = [
+    {
+      key: "capacityKw",
+      label: "System capacity (kW)",
+      step: "0.5",
+      hint: `${LIMITS.capacityKw.min}–${LIMITS.capacityKw.max.toLocaleString()}`,
+      invalid: parsed.capacityKw === null,
+    },
+    {
+      key: "tariffUsd",
+      label: "Electricity tariff ($/kWh)",
+      step: "0.01",
+      hint: `${LIMITS.tariffUsd.min}–${LIMITS.tariffUsd.max}`,
+      invalid: parsed.tariffUsd === null,
+    },
+    {
+      key: "performanceRatio",
+      label: "Performance ratio",
+      step: "0.01",
+      hint: `${LIMITS.performanceRatio.min}–${LIMITS.performanceRatio.max}`,
+      invalid: parsed.performanceRatio === null,
+    },
+  ];
+
   return (
     <Card className="glass-card">
       <CardHeader className="pb-2">
@@ -165,12 +212,12 @@ export function WhatIfPanel({ prediction, baseline }: WhatIfPanelProps) {
             <SlidersHorizontal className="h-4 w-4 text-amber-500" />
             What-if simulator
           </span>
-          {isDirty && (
+          {(isDirty || result) && (
             <Button
               variant="ghost"
               size="sm"
               className="h-7 px-2 text-xs"
-              onClick={() => setSliders(initialSliders)}
+              onClick={reset}
             >
               <RotateCcw className="h-3 w-3 mr-1" />
               Reset
@@ -178,58 +225,56 @@ export function WhatIfPanel({ prediction, baseline }: WhatIfPanelProps) {
           )}
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          Adjust system parameters — finances recompute deterministically from
-          the same irradiance prediction.
+          Adjust system parameters and simulate — finances recompute
+          deterministically from the same irradiance prediction.
         </p>
       </CardHeader>
       <CardContent className="space-y-5">
-        <div className="grid gap-5 sm:grid-cols-3">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">System capacity</span>
-              <span className="font-medium">{sliders.capacityKw} kW</span>
+        <form
+          className="flex flex-wrap items-end gap-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void runSimulation();
+          }}
+        >
+          {fields.map((field) => (
+            <div key={field.key} className="space-y-1.5 min-w-36 flex-1">
+              <Label
+                htmlFor={`what-if-${field.key}`}
+                className="text-xs text-muted-foreground"
+              >
+                {field.label}
+              </Label>
+              <Input
+                id={`what-if-${field.key}`}
+                type="number"
+                inputMode="decimal"
+                step={field.step}
+                value={inputs[field.key]}
+                onChange={(e) =>
+                  setInputs((prev) => ({ ...prev, [field.key]: e.target.value }))
+                }
+                aria-invalid={field.invalid}
+                className={field.invalid ? "border-red-400" : undefined}
+              />
+              <p className={`text-[10px] ${field.invalid ? "text-red-500" : "text-muted-foreground/70"}`}>
+                Range: {field.hint}
+              </p>
             </div>
-            <Slider
-              min={1}
-              max={100}
-              step={0.5}
-              value={[sliders.capacityKw]}
-              onValueChange={([value]) =>
-                setSliders((s) => ({ ...s, capacityKw: value }))
-              }
-            />
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Electricity tariff</span>
-              <span className="font-medium">${sliders.tariffUsd.toFixed(2)}/kWh</span>
-            </div>
-            <Slider
-              min={0.02}
-              max={0.5}
-              step={0.01}
-              value={[sliders.tariffUsd]}
-              onValueChange={([value]) =>
-                setSliders((s) => ({ ...s, tariffUsd: value }))
-              }
-            />
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Performance ratio</span>
-              <span className="font-medium">{sliders.performanceRatio.toFixed(2)}</span>
-            </div>
-            <Slider
-              min={0.6}
-              max={0.95}
-              step={0.01}
-              value={[sliders.performanceRatio]}
-              onValueChange={([value]) =>
-                setSliders((s) => ({ ...s, performanceRatio: value }))
-              }
-            />
-          </div>
-        </div>
+          ))}
+          <Button
+            type="submit"
+            disabled={!allValid || isLoading}
+            className="bg-amber-400 text-foreground hover:bg-amber-500"
+          >
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+            ) : (
+              <Play className="h-4 w-4 mr-1.5" />
+            )}
+            Simulate
+          </Button>
+        </form>
 
         {error && <p className="text-xs text-red-500">{error}</p>}
 
@@ -239,12 +284,7 @@ export function WhatIfPanel({ prediction, baseline }: WhatIfPanelProps) {
               <tr className="text-xs text-muted-foreground border-b border-white/40">
                 <th className="text-left font-medium py-1.5">Metric</th>
                 <th className="text-right font-medium py-1.5">Baseline</th>
-                <th className="text-right font-medium py-1.5">
-                  <span className="inline-flex items-center gap-1.5">
-                    What-if
-                    {isLoading && <Loader2 className="h-3 w-3 animate-spin" />}
-                  </span>
-                </th>
+                <th className="text-right font-medium py-1.5">What-if</th>
                 <th className="text-right font-medium py-1.5">Δ</th>
               </tr>
             </thead>

@@ -27,6 +27,7 @@ import { useLocationsStore } from "@/lib/locations-store";
 import { useAnalyticsFilters } from "@/lib/analytics-context";
 import { AnalyticsFilterPanel } from "@/components/analytics-filter-panel";
 import { AnalyticsComparisonView } from "@/components/analytics-comparison-view";
+import { PortfolioInsightsCard } from "@/components/portfolio-insights-card";
 
 const chartConfig = {
   output: {
@@ -127,6 +128,15 @@ export default function AnalyticsPage() {
 
     const topRegion = Object.entries(totals.region).sort((a, b) => b[1] - a[1])[0] ?? null;
 
+    const insightSites = runs.map((item) => ({
+      name: item.name,
+      region: item.region,
+      capacity_kw: item.systemCapacityKw,
+      annual_output_kwh: item.run.summary.annualOutputKwh,
+      annual_savings_usd: item.run.summary.annualSavingsUsd,
+      payback_years: item.run.summary.paybackYears,
+    }));
+
     return {
       allLocations: withRuns,
       filteredLocations: filtered,
@@ -141,6 +151,7 @@ export default function AnalyticsPage() {
       topSites,
       chartData,
       topRegion,
+      insightSites,
     };
   }, [locations, filters]);
 
@@ -226,6 +237,8 @@ export default function AnalyticsPage() {
           <span>Installed capacity: {filteredAndAnalyzed.installedCapacity.toFixed(1)} kW</span>
         </CardContent>
       </Card>
+
+      <PortfolioInsightsCard sites={filteredAndAnalyzed.insightSites} />
 
       <AnalyticsFilterPanel />
 

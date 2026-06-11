@@ -30,6 +30,7 @@ from services.physics_simulation_service import PhysicsSimulationService
 from services.solar_geometry_service import SolarGeometryService
 from services.analysis_pipeline import AnalysisContext, AnalysisPipeline
 from services.recommendation_service import RecommendationService
+from services.portfolio_insights_service import PortfolioInsightsService
 from utils.validation import ValidationError
 from utils.logging import logger
 
@@ -57,6 +58,7 @@ def create_app() -> Flask:
         financial_service=financial_service,
         geometry_service=geometry_service,
     )
+    portfolio_insights_service = PortfolioInsightsService()
 
     pipeline = AnalysisPipeline(
         nasa_service=nasa_service,
@@ -260,6 +262,26 @@ def create_app() -> Flask:
                 "Recommendations failed: %s\n%s", exc, traceback.format_exc()
             )
             return jsonify({"error": "Recommendations failed."}), 500
+
+    @application.route("/portfolio-insights", methods=["POST"])
+    def portfolio_insights():
+        """Grounded LLM commentary over deterministic portfolio stats."""
+        try:
+            payload = request.get_json(force=True)
+            sites = payload.get("sites")
+            if not isinstance(sites, list):
+                return jsonify({"error": "Missing 'sites' list."}), 400
+            result = portfolio_insights_service.summarize(sites)
+            return jsonify(result)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        except RuntimeError as exc:
+            return jsonify({"error": str(exc)}), 503
+        except Exception as exc:
+            logger.error(
+                "Portfolio insights failed: %s\n%s", exc, traceback.format_exc()
+            )
+            return jsonify({"error": "Portfolio insights failed."}), 500
 
     @application.route("/analyze", methods=["POST"])
     def analyze():

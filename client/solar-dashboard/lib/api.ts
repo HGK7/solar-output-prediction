@@ -226,6 +226,45 @@ export async function getRecommendations(params: {
   return res.json();
 }
 
+// ── Portfolio insights (grounded LLM over saved runs) ──
+
+export interface PortfolioSitePayload {
+  name: string;
+  region: string;
+  capacity_kw: number;
+  annual_output_kwh: number;
+  annual_savings_usd: number;
+  payback_years: number;
+}
+
+export interface PortfolioInsightsResponse {
+  headline: string;
+  highlights: string[];
+  watch_out: string | null;
+  stats: Record<string, unknown>;
+}
+
+export async function getPortfolioInsights(
+  sites: PortfolioSitePayload[],
+): Promise<PortfolioInsightsResponse> {
+  const res = await fetch(`${API_BASE}/portfolio-insights`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sites }),
+  });
+
+  if (res.status === 503) {
+    throw new RAGUnavailableError("Insights service is offline.");
+  }
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: "Portfolio insights failed." }));
+    throw new Error(err.error ?? "Portfolio insights failed.");
+  }
+
+  return res.json();
+}
+
 // ── RAG Q&A ──
 
 export class RAGUnavailableError extends Error {
