@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import os
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from config import Config
-from rag.vectorstore import VectorStore
 from utils.logging import logger
+
+if TYPE_CHECKING:
+    from rag.vectorstore import VectorStore
 
 _HEADING_RE = re.compile(r"^(#{1,4})\s+(.+)$")
 
