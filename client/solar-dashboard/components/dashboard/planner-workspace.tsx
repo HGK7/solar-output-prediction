@@ -271,7 +271,7 @@ export function PlannerWorkspace({
               <Play className="h-3.5 w-3.5 fill-current" />
               <span>
                 {apiOffline
-                  ? "Service unavailable"
+                  ? "Connecting to server…"
                   : !hasLocation
                     ? "Pin a location first"
                     : isSimulating
