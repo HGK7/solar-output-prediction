@@ -89,6 +89,37 @@ class FakeRAG:
         raise AssertionError("RAG must not be called when grounding disabled")
 
 
+class CountingExplanation:
+    def __init__(self, fail_with_quota=False):
+        self.calls = 0
+        self.fail_with_quota = fail_with_quota
+
+    def explain(self, explanation_input, api_key=None):
+        self.calls += 1
+        if self.fail_with_quota:
+            raise ValueError("429 RESOURCE_EXHAUSTED: quota exceeded")
+        return {"summary": "explained", "citations": []}
+
+
+class RetrieveOnlyRAG:
+    def retrieve(self, question, api_key=None):
+        return {
+            "citations": [{"source": "solar_costs.md", "section": "Costs"}],
+            "retrieved_documents": [{"source": "solar_costs.md", "snippet": "x"}],
+            "retrieval_count": 1,
+        }
+
+    def ask(self, *args, **kwargs):
+        raise AssertionError("grounding must not call the LLM ask path")
+
+
+@pytest.fixture(autouse=True)
+def reset_llm_block(monkeypatch):
+    import services.analysis_pipeline as ap
+
+    monkeypatch.setattr(ap, "_llm_blocked_until", 0.0)
+
+
 @pytest.fixture
 def pipeline(monkeypatch):
     monkeypatch.setattr(Config, "ENABLE_RAG_GROUNDING", False)
@@ -162,6 +193,38 @@ def test_run_stages_llm_failure_degrades_explanation_not_pipeline(pipeline):
     assert prediction.payload["prediction"] == 5.5
 
 
+def test_grounding_uses_retrieval_only(monkeypatch, pipeline):
+    monkeypatch.setattr(Config, "ENABLE_RAG_GROUNDING", True)
+    pipeline._rag = RetrieveOnlyRAG()
+    results = list(pipeline.run_stages(AnalysisContext(lat=26.9, lon=75.8)))
+    assert results[-1].kind == "done"
+    explanation = next(r for r in results if r.kind == "explanation")
+    assert explanation.payload["summary"] == "explained"
+
+
+def test_quota_block_skips_system_key_only_until_cooldown(monkeypatch, pipeline):
+    import services.analysis_pipeline as ap
+
+    monkeypatch.setattr(Config, "GEMINI_API_KEY", "system-key-123456")
+    clock = [1000.0]
+    monkeypatch.setattr(ap.time, "monotonic", lambda: clock[0])
+
+    pipeline._explanation = CountingExplanation(fail_with_quota=True)
+    list(pipeline.run_stages(AnalysisContext(lat=26.9, lon=75.8, api_key="system-key-123456")))
+    assert pipeline._explanation.calls == 1
+
+    pipeline._explanation = CountingExplanation()
+    list(pipeline.run_stages(AnalysisContext(lat=26.9, lon=75.8, api_key="system-key-123456")))
+    assert pipeline._explanation.calls == 0  # system key skipped during cooldown
+
+    list(pipeline.run_stages(AnalysisContext(lat=26.9, lon=75.8, api_key="user-byok-key-987654")))
+    assert pipeline._explanation.calls == 1  # own key is never blocked
+
+    clock[0] += ap.LLM_QUOTA_COOLDOWN_S + 1
+    list(pipeline.run_stages(AnalysisContext(lat=26.9, lon=75.8, api_key="system-key-123456")))
+    assert pipeline._explanation.calls == 2  # cooldown over
+
+
 def test_run_stages_infers_india_region(pipeline):
     ctx = AnalysisContext(lat=26.9, lon=75.8)
     financial = next(
@@ -227,3 +290,12 @@ def test_from_json_coords_sets_nasa_source():
 )
 def test_infer_region_from_coordinates(lat, lon, expected):
     assert infer_region_from_coordinates(lat, lon) == expected
+
+
+def test_call_with_timeout_stops_waiting():
+    import time
+
+    from services.analysis_pipeline import call_with_timeout
+
+    with pytest.raises(TimeoutError):
+        call_with_timeout(lambda: time.sleep(5), seconds=0.05)

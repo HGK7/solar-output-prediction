@@ -7,11 +7,12 @@ from chromadb import Documents, EmbeddingFunction, Embeddings
 from config import Config
 
 
-def create_rag_embeddings():
+def create_rag_embeddings(api_key: str | None = None):
     """Build LangChain Gemini embeddings for Chroma retrieval."""
-    if not Config.GEMINI_API_KEY:
+    active_key = (api_key or Config.GEMINI_API_KEY or "").strip()
+    if not active_key:
         raise RuntimeError(
-            "GEMINI_API_KEY is not configured. Set it in .env to enable RAG embeddings."
+            "GEMINI_API_KEY is not configured. Set it in .env or provide X-Gemini-Api-Key."
         )
 
     try:
@@ -23,7 +24,7 @@ def create_rag_embeddings():
 
     return GoogleGenerativeAIEmbeddings(
         model=Config.EMBEDDING_MODEL,
-        google_api_key=Config.GEMINI_API_KEY,
+        google_api_key=active_key,
     )
 
 

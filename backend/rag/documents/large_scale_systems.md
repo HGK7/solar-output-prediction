@@ -68,17 +68,17 @@
 
 ## Large System Financial Analysis
 
-### CAPEX Breakdown (100 kW)
+### CAPEX Breakdown (100 kW, i.e., 100,000 W)
 
-- Panels (30%): $0.30-0.50/W = $3000-5000
-- Inverter (15%): $150-250/kW = $15000-25000
-- Balance-of-system (35%): $0.35-0.70/W = $3500-7000
-  - Racking, wiring, combiner, transformer, disconnects
-- Installation labor (15%): $0.15-0.30/W = $1500-3000
-- Soft costs (5%): $5000-10000
-  - Engineering, permitting, grid studies
+- Panels (35–40%): $0.30–0.50/W = **$30,000–$50,000**
+- Inverter (10–15%): $0.08–0.15/W ($80–150/kW) = **$8,000–$15,000**
+- Balance-of-system (25–30%): $0.20–0.40/W = **$20,000–$40,000**
+  - Racking, DC/AC cabling, combiner boxes, LT/HT switchgear, disconnects
+- Installation labor (10–15%): $0.10–0.25/W = **$10,000–$25,000**
+- Soft costs (5–10%): $0.05–0.15/W = **$5,000–$15,000**
+  - Structural engineering, CEIG/utility permitting, grid interconnection studies
 
-**Total**: $0.80-1.50/W = $80000-150000 for 100 kW
+**Total**: $0.75–1.45/W = **$75,000–$145,000** for 100 kW
 
 ### OPEX (Annual, 100 kW)
 

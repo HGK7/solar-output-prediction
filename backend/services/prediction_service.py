@@ -3,7 +3,6 @@ Prediction service — orchestrates ML model inference.
 
 This is the ONLY path through which numeric predictions are generated.
 LLMs are never involved in this pipeline.
-
 """
 
 from __future__ import annotations
@@ -11,12 +10,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from config import Config
-from utils.validation import (
-    validate_prediction_input,
-    validate_model_name,
-    ValidationError,
-)
 from utils.logging import logger
+from utils.validation import (
+    ValidationError,
+    validate_model_name,
+    validate_prediction_input,
+)
 
 if TYPE_CHECKING:
     from models.loader import ModelManager
@@ -33,31 +32,32 @@ class PredictionService:
         Run a full prediction pipeline:
         1. Validate input
         2. Select model
-        3. Run deterministic prediction
-        4. Package result with metadata and provenance
+        3. Check Out-of-Distribution (OOD) feature bounds against training stats
+        4. Run deterministic prediction
+        5. Package result with metadata, OOD diagnostics, and provenance
         """
-        # --- Validate ---
         features = validate_prediction_input(payload)
         model_name = validate_model_name(payload.get("model"))
 
-        # --- Get model ---
         model = self.model_manager.get_model(model_name)
 
-        # --- Build feature vector (order must match training) ---
         import numpy as np
 
         feature_vector = np.array([features[name] for name in Config.FEATURE_NAMES])
-
-        # --- Predict ---
-        prediction = model.predict(feature_vector)
+        raw_prediction = model.predict(feature_vector)
+        # Clamp to physically non-negative irradiance
+        prediction = max(0.05, float(raw_prediction))
         error_estimate = model.get_error_estimate()
 
+        ood_warning, ood_details = self._evaluate_ood(features)
+
         logger.info(
-            "Prediction: %.4f %s (model=%s, ±%.4f)",
+            "Prediction: %.4f %s (model=%s, ±%.4f, ood=%s)",
             prediction,
             Config.TARGET_UNIT,
             model_name,
             error_estimate,
+            ood_warning,
         )
 
         return {
@@ -74,6 +74,8 @@ class PredictionService:
             "error_estimate": error_estimate,
             "metrics": model.get_metrics(),
             "feature_importance": model.get_feature_importance(),
+            "ood_warning": ood_warning,
+            "ood_details": ood_details,
             "prediction_context": {
                 "what_is_predicted": (
                     "Global Horizontal Irradiance (GHI) — the total solar radiation "
@@ -92,7 +94,7 @@ class PredictionService:
                     else "User-provided manual input values"
                 ),
                 "training_data": {
-                    "dataset": "NASA POWER parameters for Bhadla Solar Park region (27.5°N, 71.6°E)",
+                    "dataset": "NASA POWER multi-season solar radiation & meteorological observations",
                     "records": "Cleaned climatological observations",
                     "features_used": Config.FEATURE_NAMES,
                     "target_variable": f"{Config.TARGET_NAME} ({Config.TARGET_UNIT})",
@@ -106,3 +108,29 @@ class PredictionService:
                 ),
             },
         }
+
+    def _evaluate_ood(self, features: dict[str, float]) -> tuple[bool, list[str]]:
+        """Check if input features fall substantially outside training distribution."""
+        stats = self.model_manager.get_data_stats()
+        if not stats or "features" not in stats:
+            return False, []
+
+        feat_stats = stats["features"]
+        details: list[str] = []
+        for name, val in features.items():
+            info = feat_stats.get(name)
+            if not info:
+                continue
+            f_min = float(info.get("min", val))
+            f_max = float(info.get("max", val))
+            f_std = max(float(info.get("std", 1.0)), 1e-4)
+            f_mean = float(info.get("mean", val))
+            z_score = abs(val - f_mean) / f_std
+
+            if val < f_min - 0.5 * f_std or val > f_max + 0.5 * f_std or z_score > 3.2:
+                unit = Config.FEATURE_UNITS.get(name, "")
+                details.append(
+                    f"{name} ({val} {unit}) is outside training range [{f_min:.1f}, {f_max:.1f}] {unit}."
+                )
+
+        return len(details) > 0, details

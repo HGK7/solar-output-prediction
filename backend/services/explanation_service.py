@@ -23,6 +23,14 @@ _PROMPT_DIR = os.path.join(Config.BASE_DIR, "prompts")
 # Key is hash of (prediction, features, model) — same inputs = same explanation.
 _explanation_cache: TTLCache = TTLCache(maxsize=128, ttl=3600)
 
+# Plain names for the prompt so the written note never shows internal model ids.
+_MODEL_DISPLAY_NAMES = {
+    "hist_gradient_boosting": "gradient-boosted climate model",
+    "random_forest": "multi-tree climate model",
+    "linear_regression": "linear clear-sky model",
+    "svm": "kernel climate model",
+}
+
 
 class ExplanationService:
     """Generates structured natural-language explanations of predictions."""
@@ -35,7 +43,7 @@ class ExplanationService:
     # Public API
     # ------------------------------------------------------------------
 
-    def explain(self, prediction_result: dict) -> dict:
+    def explain(self, prediction_result: dict, api_key: str | None = None) -> dict:
         """
         Return a structured JSON explanation for a completed prediction.
 
@@ -49,7 +57,7 @@ class ExplanationService:
             logger.info("Explanation cache hit for key: %s", cache_key[:16])
             return _explanation_cache[cache_key]
 
-        client = self._get_client()
+        client = self._get_client(api_key=api_key)
         prompt = self._format_prompt(prediction_result)
 
         from google.genai import types
@@ -77,33 +85,66 @@ class ExplanationService:
     @staticmethod
     def _build_cache_key(prediction_result: dict) -> str:
         """
-        Build a deterministic cache key from prediction inputs.
-        Same prediction + features + model = same explanation.
+        Build a deterministic cache key from prediction, features, financial, and system context.
+        Ensures distinct models, weather features, or system configurations never collide.
         """
+        raw_features = (
+            prediction_result.get("input_features")
+            or prediction_result.get("features_used")
+            or {}
+        )
+        normalized_features: dict = {}
+        if isinstance(raw_features, dict):
+            for k, v in raw_features.items():
+                val = v.get("value") if isinstance(v, dict) else v
+                normalized_features[k] = (
+                    round(float(val), 3) if isinstance(val, (int, float)) else val
+                )
+
+        sys_ctx = prediction_result.get("system_context") or {}
+        fin = prediction_result.get("financial") or {}
+        fin_params = fin.get("system_parameters") if isinstance(fin, dict) else {}
+
         key_data = {
-            "schema_version": 2,
-            "prediction": round(prediction_result.get("prediction", 0), 4),
-            "model": prediction_result.get("model_name", ""),
-            "features": {
-                k: round(v, 2) if isinstance(v, (int, float)) else v
-                for k, v in prediction_result.get("features_used", {}).items()
+            "schema_version": 3,
+            "prediction": round(float(prediction_result.get("prediction", 0) or 0), 4),
+            "model": (
+                prediction_result.get("model_used")
+                or prediction_result.get("model_name")
+                or ""
+            ),
+            "features": normalized_features,
+            "system_context": {
+                k: sys_ctx.get(k)
+                for k in sorted(sys_ctx.keys())
+                if isinstance(sys_ctx, dict)
+            },
+            "financial_summary": {
+                "annual_output_kwh": fin.get("annual_output_kwh") if isinstance(fin, dict) else None,
+                "simple_payback_years": fin.get("simple_payback_years") if isinstance(fin, dict) else None,
+                "net_system_cost_usd": fin.get("net_system_cost_usd") if isinstance(fin, dict) else None,
+                "params": fin_params if isinstance(fin_params, dict) else {},
             },
         }
-        key_json = json.dumps(key_data, sort_keys=True)
+        key_json = json.dumps(key_data, sort_keys=True, default=str)
         return hashlib.sha256(key_json.encode()).hexdigest()
 
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _get_client(self):
-        if self._client is None:
-            from google import genai
+    def _get_client(self, api_key: str | None = None):
+        from google import genai
 
+        custom_key = (api_key or "").strip()
+        if custom_key:
+            return genai.Client(api_key=custom_key)
+
+        if self._client is None:
             if not Config.GEMINI_API_KEY:
                 raise RuntimeError(
                     "GEMINI_API_KEY is not configured. "
-                    "Set it in your .env file to enable explanations."
+                    "Set it in your .env file or provide an X-Gemini-Api-Key header."
                 )
             self._client = genai.Client(api_key=Config.GEMINI_API_KEY)
         return self._client
@@ -193,7 +234,7 @@ class ExplanationService:
         template_kwargs = dict(
             prediction=result["prediction"],
             unit=result["unit"],
-            model_name=result["model_used"],
+            model_name=_MODEL_DISPLAY_NAMES.get(result["model_used"], "Zenith sunlight model"),
             error_estimate=result.get("error_estimate", "N/A"),
             features_formatted="\n".join(features_lines),
             feature_importance="\n".join(importance_lines) or "  Not available",
@@ -215,9 +256,19 @@ class ExplanationService:
             return f.read()
 
     @staticmethod
-    def _parse_response(content: str) -> dict:
+    def _parse_response(content: str | list) -> dict:
         """Parse LLM response, extracting JSON from possible markdown fences."""
-        text = content.strip()
+        if isinstance(content, list):
+            chunks = []
+            for part in content:
+                if isinstance(part, str):
+                    chunks.append(part)
+                elif isinstance(part, dict):
+                    chunks.append(str(part.get("text") or part.get("content") or ""))
+                else:
+                    chunks.append(str(getattr(part, "text", part)))
+            content = "".join(chunks)
+        text = str(content or "").strip()
         # Strip markdown code fences if present
         if text.startswith("```"):
             lines = text.split("\n")

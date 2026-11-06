@@ -14,7 +14,7 @@ class Config:
 
     # --- Gemini LLM ---
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
-    GEMINI_MODEL: str = "gemini-2.5-flash-lite"
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
     LLM_TEMPERATURE: float = 0.1  # Low temperature for deterministic explanations
 
     # --- Data & Models ---
@@ -41,12 +41,16 @@ class Config:
     PHYSICS_MODE: str = os.getenv("PHYSICS_MODE", "analytical").lower()
     # When false, /analyze skips Gemini-embed + Chroma grounding
     ENABLE_RAG_GROUNDING: bool = (
-        os.getenv("ENABLE_RAG_GROUNDING", "false").lower() == "true"
+        os.getenv("ENABLE_RAG_GROUNDING", "true").lower() == "true"
     )
     # When true, refuse to train at request time — models must exist (build or commit)
     REQUIRE_PRETRAINED_MODELS: bool = (
         os.getenv("REQUIRE_PRETRAINED_MODELS", "true").lower() == "true"
     )
+    # Hourly request cap per IP when callers use the server's System GEMINI_API_KEY
+    SYSTEM_KEY_HOURLY_LIMIT: int = int(os.getenv("SYSTEM_KEY_HOURLY_LIMIT", "30"))
+    # Compute device preference: auto | cuda | cpu
+    COMPUTE_DEVICE: str = os.getenv("COMPUTE_DEVICE", "auto").lower()
 
     # --- Feature Schema ---
     FEATURE_NAMES: list[str] = [

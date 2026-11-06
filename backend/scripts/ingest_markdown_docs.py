@@ -24,14 +24,15 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from config import Config
-from rag.ingest import chunk_document, extract_section
+from rag.ingest import chunk_document, chunk_document_with_sections, extract_section
 
 
 def load_markdown_chunks(source_dir: Path) -> tuple[list[str], list[dict], list[str]]:
     """Read .md/.txt files and return (texts, metadatas, ids).
 
     Metadata mirrors rag/ingest.py: `source` is the bare filename so
-    RAGService citations resolve against GET /rag/documents/<filename>.
+    RAGService citations resolve against GET /rag/documents/<filename>,
+    and `section` tracks the active `# / ## / ###` markdown heading.
     """
     files = sorted(
         p for p in source_dir.iterdir() if p.suffix.lower() in (".md", ".txt")
@@ -45,22 +46,22 @@ def load_markdown_chunks(source_dir: Path) -> tuple[list[str], list[dict], list[
 
     for filepath in files:
         content = filepath.read_text(encoding="utf-8")
-        section = extract_section(content)
-        chunks = chunk_document(content)
-        if not chunks:
+        default_section = extract_section(content)
+        section_chunks = chunk_document_with_sections(content)
+        if not section_chunks:
             continue
-        for i, chunk in enumerate(chunks):
-            texts.append(chunk)
+        for i, item in enumerate(section_chunks):
+            texts.append(item["content"])
             metadatas.append(
                 {
                     "source": filepath.name,
-                    "section": section,
+                    "section": item["section"] or default_section,
                     "chunk_index": i,
-                    "total_chunks": len(chunks),
+                    "total_chunks": len(section_chunks),
                 }
             )
             ids.append(f"{filepath.name}_chunk_{i}")
-        print(f"  {filepath.name}: {len(chunks)} chunks")
+        print(f"  {filepath.name}: {len(section_chunks)} chunks")
 
     return texts, metadatas, ids
 

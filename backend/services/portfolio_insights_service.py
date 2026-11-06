@@ -33,19 +33,22 @@ class PortfolioInsightsService:
         with open(prompt_path, "r", encoding="utf-8") as f:
             self._prompt_template = f.read()
 
-    def _get_client(self):
+    def _get_client(self, api_key: str | None = None):
+        from google import genai
+
+        custom_key = (api_key or "").strip()
+        if custom_key:
+            return genai.Client(api_key=custom_key)
+
         if self._client is None:
             if not Config.GEMINI_API_KEY:
                 raise RuntimeError(
-                    "GEMINI_API_KEY is not configured. Set it in .env to "
-                    "enable portfolio insights."
+                    "GEMINI_API_KEY is not configured. Set it in .env or provide X-Gemini-Api-Key."
                 )
-            from google import genai
-
             self._client = genai.Client(api_key=Config.GEMINI_API_KEY)
         return self._client
 
-    def summarize(self, sites: list[dict]) -> dict:
+    def summarize(self, sites: list[dict], api_key: str | None = None) -> dict:
         """Build deterministic stats then ask the LLM for grounded commentary."""
         cleaned = self._clean_sites(sites)
         if len(cleaned) < 2:
@@ -53,7 +56,7 @@ class PortfolioInsightsService:
 
         stats = self._portfolio_stats(cleaned)
 
-        client = self._get_client()
+        client = self._get_client(api_key=api_key)
         from google.genai import types
 
         aggregates = {k: v for k, v in stats.items() if k != "sites"}
@@ -82,7 +85,9 @@ class PortfolioInsightsService:
         for site in sites[:_MAX_SITES]:
             if not isinstance(site, dict):
                 continue
-            name = str(site.get("name", "")).strip()[:80]
+            from utils.security import sanitize_untrusted_text
+
+            name = sanitize_untrusted_text(str(site.get("name", "")), max_len=80)
             try:
                 annual_output = float(site["annual_output_kwh"])
                 annual_savings = float(site["annual_savings_usd"])

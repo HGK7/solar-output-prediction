@@ -1,0 +1,35 @@
+{
+  "n_samples": 176,
+  "features": {
+    "Temperature": {
+      "mean": 26.9977,
+      "std": 9.0824,
+      "min": 12.16,
+      "max": 41.05
+    },
+    "Humidity": {
+      "mean": 28.1774,
+      "std": 10.6358,
+      "min": 9.62,
+      "max": 65.62
+    },
+    "Wind Speed": {
+      "mean": 2.5981,
+      "std": 1.2218,
+      "min": 1.06,
+      "max": 6.43
+    },
+    "Clear Sky Irradiance": {
+      "mean": 6.2589,
+      "std": 1.3417,
+      "min": 3.41,
+      "max": 8.35
+    }
+  },
+  "target": {
+    "mean": 5.7945,
+    "std": 1.5294,
+    "min": 1.61,
+    "max": 8.26
+  }
+}

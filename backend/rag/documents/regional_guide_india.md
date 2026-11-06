@@ -129,27 +129,27 @@
 
 ### 10 kW Residential System - Jaipur, Rajasthan
 
-- **Capex**: $12000-15000 (average $1.30/W)
-- **Annual generation**: 50 MWh/year
-- **Revenue at $0.08/kWh**: $4000/year (with 75% self-consumption assumed)
-- **Payback**: 3.5-4 years
-- **25-year NPV** (8% discount): $65000-75000
+- **Capex**: $6,500–$8,500 gross ($0.65–0.85/W); eligible for **₹78,000 (~$935) PM Surya Ghar CFA**
+- **Annual generation**: **16.5–17.5 MWh/year** (16,500–17,500 kWh/year at 6.1 kWh/m²/day PSH and 0.76 PR)
+- **Annual savings at $0.085/kWh**: $1,400–$1,490/year
+- **Payback**: 4.0–4.8 years after PM Surya Ghar subsidy
+- **25-year NPV** (8% discount): $11,500–$14,500
 
 ### 10 kW Residential System - Bangalore, Karnataka
 
-- **Capex**: $14000-17000 (average $1.50/W, higher labor)
-- **Annual generation**: 48 MWh/year (lower irradiance)
-- **Revenue at $0.11/kWh**: $5280/year
-- **Payback**: 3.0-3.5 years (tariff advantage offsets lower generation)
-- **25-year NPV**: $70000-80000
+- **Capex**: $7,000–$9,000 gross ($0.70–0.90/W); eligible for **₹78,000 (~$935) PM Surya Ghar CFA**
+- **Annual generation**: **15.5–16.5 MWh/year** (15,500–16,500 kWh/year at 5.7 kWh/m²/day PSH and 0.77 PR)
+- **Annual savings at $0.11/kWh**: $1,705–$1,815/year
+- **Payback**: 3.5–4.2 years (higher BESCOM tariff offsets slightly lower irradiance)
+- **25-year NPV**: $14,000–$17,500
 
 ### 100 kW Commercial System - Jodhpur, Rajasthan
 
-- **Capex**: $100000-120000 (average $1.05/W)
-- **Annual generation**: 540 MWh/year
-- **Revenue at $0.12/kWh**: $64800/year
-- **Payback**: 1.8-2.0 years
-- **25-year NPV**: $400000-450000
+- **Capex**: $65,000–$85,000 ($0.65–0.85/W turnkey C&I); eligible for **40% Accelerated Depreciation (Sec. 32)**
+- **Annual generation**: **165–175 MWh/year** (165,000–175,000 kWh/year at 6.2 kWh/m²/day PSH and 0.77 PR)
+- **Annual savings at $0.12/kWh commercial tariff**: $19,800–$21,000/year
+- **Payback**: 3.0–3.6 years (2.4–2.9 years including 40% Accelerated Depreciation tax shield)
+- **25-year NPV**: $160,000–$210,000
 
 ## Resource Forecast by Region (5-Year Outlook)
 

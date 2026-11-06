@@ -7,26 +7,79 @@ Flask routes are thin adapters over this module.
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import Any, Iterator, Optional
+import time
+from typing import Any, Callable, Iterator, Optional, TypeVar
 
 from config import Config
 from services.physics_simulation_service import PhysicsInput, PhysicsSimulationError
 from services.nasa_service import NASAServiceError
 from utils.logging import logger
-from utils.validation import ValidationError, validate_coordinates
+from utils.validation import (
+    ValidationError,
+    validate_coordinates,
+    validate_model_name,
+    validate_system_inputs,
+)
+
+_T = TypeVar("_T")
+# shortcut: a timed-out call keeps its thread until the SDK returns, upgrade when the client has a hard timeout
+LLM_CALL_TIMEOUT_S = 20
+LLM_QUOTA_COOLDOWN_S = 3600
+# After a 429 on the shared server key, skip it until this monotonic time; own keys are never blocked.
+_llm_blocked_until = 0.0
+
+
+def _uses_system_key(api_key: str | None) -> bool:
+    return (api_key or "").strip() in ("", (Config.GEMINI_API_KEY or "").strip())
+
+
+def _llm_blocked(api_key: str | None) -> bool:
+    return _uses_system_key(api_key) and time.monotonic() < _llm_blocked_until
+
+
+def _block_system_llm(api_key: str | None) -> None:
+    global _llm_blocked_until
+    if _uses_system_key(api_key):
+        _llm_blocked_until = time.monotonic() + LLM_QUOTA_COOLDOWN_S
+
+
+def call_with_timeout(fn: Callable[[], _T], seconds: float = LLM_CALL_TIMEOUT_S) -> _T:
+    pool = ThreadPoolExecutor(max_workers=1)
+    future = pool.submit(fn)
+    try:
+        return future.result(timeout=seconds)
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
 
 
 STAGE_DOCUMENTS: dict[str, list[str]] = {
-    "location": ["data_provenance", "regional_guide_india.md"],
-    "prediction": ["solar_fundamentals.md"],
-    "physics": ["solar_panel_efficiency.md", "large_scale_systems.md"],
-    "financial": ["solar_costs.md"],
+    "location": [
+        "data_provenance",
+        "regional_guide_india.md",
+        "global_solar_subsidies_and_tariffs.md",
+    ],
+    "prediction": ["solar_fundamentals.md", "weather_impact.md"],
+    "physics": [
+        "solar_panel_efficiency.md",
+        "large_scale_systems.md",
+        "homeowner_sizing_and_roof_guide.md",
+        "commercial_and_industrial_scaling.md",
+    ],
+    "financial": [
+        "solar_costs.md",
+        "global_solar_subsidies_and_tariffs.md",
+        "battery_storage_and_grid_modes.md",
+        "homeowner_sizing_and_roof_guide.md",
+    ],
     "explanation": [
         "bhadla_solar_park.md",
         "weather_impact.md",
         "solar_fundamentals.md",
         "operations_maintenance.md",
+        "battery_storage_and_grid_modes.md",
+        "commercial_and_industrial_scaling.md",
     ],
 }
 
@@ -44,45 +97,59 @@ class AnalysisContext:
     installation_type: str = "rooftop"
     grid_connection: str = "grid-tied"
     data_source: str = "nasa_api"
+    api_key: Optional[str] = None
 
     @property
     def has_coords(self) -> bool:
         return self.lat is not None and self.lon is not None
 
     @classmethod
-    def from_json(cls, payload: dict) -> AnalysisContext:
-        has_coords = payload.get("lat") is not None and payload.get("lon") is not None
-        manual_features = payload.get("features")
-        if has_coords:
+    def _validated(
+        cls,
+        system_raw: dict[str, Any],
+        model: Any,
+        api_key: str | None,
+        **location: Any,
+    ) -> AnalysisContext:
+        system = validate_system_inputs(system_raw)
+        panel_technology = system.pop("panel_technology", "monocrystalline")
+        system.setdefault("grid_connection", "grid-tied")
+        system.setdefault("installation_type", "rooftop")
+        return cls(
+            model=validate_model_name(model or "linear_regression"),
+            financial_overrides=system,
+            panel_technology=panel_technology,
+            installation_type=system["installation_type"],
+            grid_connection=system["grid_connection"],
+            api_key=api_key,
+            **location,
+        )
+
+    @classmethod
+    def from_json(cls, payload: dict, api_key: str | None = None) -> AnalysisContext:
+        overrides = payload.get("financial_overrides") or {}
+        if not isinstance(overrides, dict):
+            raise ValidationError("'financial_overrides' must be an object.", field="financial_overrides")
+        system_raw = {
+            **overrides,
+            **{
+                k: payload[k]
+                for k in ("panel_technology", "installation_type", "grid_connection")
+                if payload.get(k) not in (None, "")
+            },
+        }
+        if payload.get("lat") is not None and payload.get("lon") is not None:
             lat, lon = validate_coordinates(payload["lat"], payload["lon"])
-            return cls(
-                lat=lat,
-                lon=lon,
-                model=payload.get("model", "linear_regression"),
-                financial_overrides=dict(payload.get("financial_overrides", {})),
-                panel_technology=payload.get("panel_technology", "monocrystalline"),
-                installation_type=payload.get("installation_type", "rooftop"),
-                grid_connection=payload.get(
-                    "grid_connection",
-                    payload.get("financial_overrides", {}).get(
-                        "grid_connection", "grid-tied"
-                    ),
-                ),
-                data_source="nasa_api",
+            return cls._validated(
+                system_raw, payload.get("model"), api_key, lat=lat, lon=lon, data_source="nasa_api"
             )
+        manual_features = payload.get("features")
         if manual_features and isinstance(manual_features, dict):
-            return cls(
+            return cls._validated(
+                system_raw,
+                payload.get("model"),
+                api_key,
                 features=manual_features,
-                model=payload.get("model", "linear_regression"),
-                financial_overrides=dict(payload.get("financial_overrides", {})),
-                panel_technology=payload.get("panel_technology", "monocrystalline"),
-                installation_type=payload.get("installation_type", "rooftop"),
-                grid_connection=payload.get(
-                    "grid_connection",
-                    payload.get("financial_overrides", {}).get(
-                        "grid_connection", "grid-tied"
-                    ),
-                ),
                 data_source="manual",
             )
         raise ValidationError(
@@ -91,31 +158,16 @@ class AnalysisContext:
         )
 
     @classmethod
-    def from_query(cls, args: dict[str, Any]) -> AnalysisContext:
+    def from_query(cls, args: dict[str, Any], api_key: str | None = None) -> AnalysisContext:
         lat, lon = validate_coordinates(args.get("lat"), args.get("lon"))
-        region = args.get("region", "global")
-        financial_overrides: dict[str, Any] = {"region": region}
-        if region == "global":
+        ctx = cls._validated(
+            dict(args), args.get("model"), api_key, lat=lat, lon=lon, data_source="nasa_api"
+        )
+        if ctx.financial_overrides.get("region", "global") == "global":
             inferred = infer_region_from_coordinates(lat, lon)
             if inferred != "global":
-                financial_overrides["region"] = inferred
-        for key in (
-            "system_capacity_kw",
-            "panel_efficiency",
-            "performance_ratio",
-            "electricity_tariff_usd",
-        ):
-            if args.get(key) is not None:
-                financial_overrides[key] = args[key]
-        return cls(
-            lat=lat,
-            lon=lon,
-            model=args.get("model", "linear_regression"),
-            financial_overrides=financial_overrides,
-            panel_technology=args.get("panel_technology", "monocrystalline"),
-            installation_type=args.get("installation_type", "rooftop"),
-            data_source="nasa_api",
-        )
+                ctx.financial_overrides["region"] = inferred
+        return ctx
 
 
 @dataclass
@@ -290,6 +342,7 @@ class AnalysisPipeline:
             document_grounding = self._fetch_document_grounding(
                 prediction_result, financial_result, system_context
             )
+            llm_blocked = _llm_blocked(ctx.api_key)
             explanation_input = {
                 **prediction_result,
                 "financial": financial_result,
@@ -297,7 +350,18 @@ class AnalysisPipeline:
                 "document_grounding": document_grounding,
             }
             try:
-                explanation = self._explanation.explain(explanation_input)
+                if llm_blocked:
+                    raise RuntimeError("llm_blocked")
+                try:
+                    explanation = call_with_timeout(
+                        lambda: self._explanation.explain(
+                            explanation_input, api_key=ctx.api_key
+                        )
+                    )
+                except TypeError:
+                    explanation = call_with_timeout(
+                        lambda: self._explanation.explain(explanation_input)
+                    )
                 explanation = self._enrich_explanation_with_rag(
                     explanation,
                     document_grounding,
@@ -308,10 +372,15 @@ class AnalysisPipeline:
             except RuntimeError:
                 explanation = {
                     "error": "Explanation unavailable — GEMINI_API_KEY not set."
+                    if not llm_blocked
+                    else "Explanation temporarily unavailable (LLM quota or service error). Prediction and financial results are unaffected.",
+                    "degraded": True,
                 }
             except Exception as exc:
                 # LLM failures (quota exhausted, network, service errors) must
                 # never block numeric results — degrade the explanation only.
+                if "429" in str(exc) or "RESOURCE_EXHAUSTED" in str(exc):
+                    _block_system_llm(ctx.api_key)
                 logger.warning("Explanation stage degraded: %s", exc)
                 explanation = {
                     "error": (
@@ -477,11 +546,9 @@ class AnalysisPipeline:
             prediction_result, financial_result, system_context
         )
         try:
-            rag_result = self._rag.ask(query)
+            rag_result = self._rag.retrieve(query)
             if isinstance(rag_result, dict):
-                return {**rag_result, "query": rag_result.get("query") or query}
-        except RuntimeError as exc:
-            logger.warning("RAG grounding unavailable for explanation: %s", exc)
+                return {**rag_result, "query": query}
         except Exception as exc:
             logger.warning("RAG grounding failed for explanation: %s", exc)
         return {

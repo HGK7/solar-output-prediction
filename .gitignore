@@ -9,6 +9,8 @@ __pycache__/
 *.csv
 *.log
 chroma_db/
+# Built at image build from rag/documents/
+backend/rag/rag_index.sqlite
 
 # Committed training data for Render build (small climatology CSV)
 !backend/data/cleaned_data.csv

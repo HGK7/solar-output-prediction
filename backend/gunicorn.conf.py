@@ -11,10 +11,11 @@ import os
 # Server socket
 bind = f"0.0.0.0:{os.environ.get('PORT', '5000')}"
 
-# Worker processes — single worker to stay within free-tier memory
+# Worker processes — single worker to stay within free-tier memory.
+# Threads keep /health and /ask responsive while an SSE analysis stream is open.
 workers = 1
-worker_class = "sync"
-threads = 1
+worker_class = "gthread"
+threads = 4
 
 # Timeout (longer for model loading + lazy RAG init + SSE streaming)
 timeout = 240

@@ -71,12 +71,25 @@
 - System lifetime for financial modeling: **25 years** (warranty period)
 - Inverter replacement: typically at year 10–12, cost ~**$0.10–0.15/W**
 
-## Government Incentives (Not included in default calculations)
+## LFP Battery Storage Cost Benchmarks (2024–2026)
 
-- India: Subsidy of ₹14,588/kW for first 3 kW (PM Surya Ghar scheme)
-- USA: 30% Investment Tax Credit (ITC) through 2032
-- EU: Various feed-in tariffs and net metering schemes by country
-- Note: incentives change frequently — always verify current policies
+- Residential LFP (`LiFePO4`, 5–15 kWh): **$280–450/kWh** installed (India ~$280/kWh, Europe ~$400/kWh, USA ~$450/kWh)
+- Commercial & Industrial LFP (50–500 kWh): **$220–320/kWh** turnkey installed
+- Round-trip efficiency (DC-coupled hybrid): **90–94%** (AC-coupled: **85–89%**)
+- Usable Depth of Discharge (DoD): **90%** with **6,000+ cycles** at 80% end-of-life capacity retention
+- Cell augmentation / replacement reserve: **Year 12** at ~**60%** of initial battery CAPEX
+
+## Government Incentives (2024–2026 Policy Benchmarks)
+
+- **India (PM Surya Ghar: Muft Bijli Yojana, 2024–2026)**:
+  - **₹30,000/kW** Central Financial Assistance (CFA) for the first **2 kW** (₹60,000 at 2 kW)
+  - **₹18,000/kW** for additional capacity from **2 kW to 3 kW**
+  - **Capped at ₹78,000** total subsidy for residential systems **≥ 3 kW**
+  - Group Housing Societies (GHS) / Resident Welfare Associations (RWA): **₹18,000/kW** up to 500 kW (at 10 kW per house)
+  - Commercial & Industrial (C&I): **40% Accelerated Depreciation** under Section 32 of the Income Tax Act
+- **USA (Inflation Reduction Act — IRC Sec. 25D & Sec. 48E)**: **30% federal tax credit** on solar PV and standalone/paired battery storage (`≥ 3 kWh`)
+- **Europe**: **0% VAT** exemptions on residential solar + storage in Germany (*Nullsteuersatz* up to 30 kWp), UK, and Austria, alongside feed-in tariffs (EEG) and municipal grants
+- Note: incentives change periodically — always verify current local DISCOM/utility rules
 
 ## Key Takeaways for Financial Modeling
 
