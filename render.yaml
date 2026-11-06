@@ -8,7 +8,9 @@ services:
     region: oregon
     plan: free
     rootDir: backend
-    buildCommand: pip install -r requirements.txt && python scripts/train_models.py
+    # Zero-bloat LiteVectorStore SQLite + NumPy index (<5 MB RAM on 512 MB Render free tier)
+    # pre-built during image build alongside scikit-learn ensemble models.
+    buildCommand: pip install -r requirements.txt -r requirements-rag.txt && python scripts/train_models.py && python -c "from rag.lite_store import get_lite_store; get_lite_store().ensure_synced()"
     startCommand: gunicorn -c gunicorn.conf.py app:app
     healthCheckPath: /health
     envVars:
@@ -23,6 +25,10 @@ services:
       - key: PHYSICS_MODE
         value: analytical
       - key: ENABLE_RAG_GROUNDING
-        value: "false"
+        value: "true"
       - key: REQUIRE_PRETRAINED_MODELS
         value: "true"
+      - key: COMPUTE_DEVICE
+        value: auto
+      - key: SYSTEM_KEY_HOURLY_LIMIT
+        value: "30"
