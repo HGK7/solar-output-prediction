@@ -1,12 +1,12 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   ChevronDown,
   ChevronUp,
-  Compass,
   MapPin,
   MessageSquare,
   RotateCcw,
@@ -214,9 +214,15 @@ export function TopNav() {
               href="/"
               className="flex items-center gap-3 text-left focus:outline-none group"
             >
-              <div className="w-8 h-8 bg-[#18181B] border border-[#18181B] flex items-center justify-center text-[#F59E0B]">
-                <Compass className="w-4 h-4 stroke-[2.2]" />
-              </div>
+              <Image
+                src="/zenith-mark.png"
+                alt=""
+                width={32}
+                height={32}
+                priority
+                unoptimized
+                className="w-8 h-8 shrink-0"
+              />
               <div className="flex items-center gap-2.5">
                 <span className="font-editorial text-xl font-semibold tracking-tight text-[#18181B]">
                   Zenith
