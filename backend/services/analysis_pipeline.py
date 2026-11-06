@@ -25,7 +25,7 @@ from utils.validation import (
 
 _T = TypeVar("_T")
 # shortcut: a timed-out call keeps its thread until the SDK returns, upgrade when the client has a hard timeout
-LLM_CALL_TIMEOUT_S = 20
+LLM_CALL_TIMEOUT_S = 45
 LLM_QUOTA_COOLDOWN_S = 3600
 # After a 429 on the shared server key, skip it until this monotonic time; own keys are never blocked.
 _llm_blocked_until = 0.0
@@ -381,7 +381,9 @@ class AnalysisPipeline:
                 # never block numeric results — degrade the explanation only.
                 if "429" in str(exc) or "RESOURCE_EXHAUSTED" in str(exc):
                     _block_system_llm(ctx.api_key)
-                logger.warning("Explanation stage degraded: %s", exc)
+                logger.warning(
+                    "Explanation stage degraded: %s %s", type(exc).__name__, exc
+                )
                 explanation = {
                     "error": (
                         "Explanation temporarily unavailable (LLM quota or "
