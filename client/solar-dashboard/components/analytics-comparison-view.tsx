@@ -102,7 +102,7 @@ export function AnalyticsComparisonView({ locations }: AnalyticsComparisonViewPr
 
   return (
     <div className="space-y-6">
-      <Card className="glass-card border-amber-200/40">
+      <Card className="bento-tile border-tile-border shadow-xs ">
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <span>Comparison: {selectedLocations.length} Sites</span>
@@ -128,7 +128,7 @@ export function AnalyticsComparisonView({ locations }: AnalyticsComparisonViewPr
 
             <TabsContent value="charts" className="space-y-4">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <Card className="glass-card">
+                <Card className="bento-tile border-tile-border shadow-xs">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base">Annual Output Comparison</CardTitle>
                   </CardHeader>
@@ -145,7 +145,7 @@ export function AnalyticsComparisonView({ locations }: AnalyticsComparisonViewPr
                   </CardContent>
                 </Card>
 
-                <Card className="glass-card">
+                <Card className="bento-tile border-tile-border shadow-xs">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base">Annual Savings Comparison</CardTitle>
                   </CardHeader>
@@ -201,7 +201,7 @@ export function AnalyticsComparisonView({ locations }: AnalyticsComparisonViewPr
 
             <TabsContent value="metrics">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card className="glass-card">
+                <Card className="bento-tile border-tile-border shadow-xs">
                   <CardHeader className="pb-2">
                     <CardDescription>Average Annual Output</CardDescription>
                   </CardHeader>
@@ -215,7 +215,7 @@ export function AnalyticsComparisonView({ locations }: AnalyticsComparisonViewPr
                   </CardContent>
                 </Card>
 
-                <Card className="glass-card">
+                <Card className="bento-tile border-tile-border shadow-xs">
                   <CardHeader className="pb-2">
                     <CardDescription>Average Annual Savings</CardDescription>
                   </CardHeader>
@@ -229,7 +229,7 @@ export function AnalyticsComparisonView({ locations }: AnalyticsComparisonViewPr
                   </CardContent>
                 </Card>
 
-                <Card className="glass-card">
+                <Card className="bento-tile border-tile-border shadow-xs">
                   <CardHeader className="pb-2">
                     <CardDescription>Average Payback Period</CardDescription>
                   </CardHeader>

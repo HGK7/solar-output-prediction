@@ -1,63 +1,69 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { useState } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { BentoTile, DegradedBanner, StatusBadge } from "@/components/bento";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BrainCircuit, AlertTriangle, BookOpen, Sparkles, Calculator } from "lucide-react";
+import {
+  AlertTriangle,
+  BookOpen,
+  BrainCircuit,
+  Calculator,
+  Sparkles,
+} from "lucide-react";
 import { SourceDocumentTrigger } from "@/components/source-document-trigger";
 import type { ExplanationResponse } from "@/types";
+import { cn } from "@/lib/utils";
 
 interface ExplanationPanelProps {
   explanation: ExplanationResponse | null;
   isLoading: boolean;
+  /** Tighter typography and spacing on results stack. */
+  compact?: boolean;
 }
 
-export function ExplanationPanel({ explanation, isLoading }: ExplanationPanelProps) {
+export function ExplanationPanel({
+  explanation,
+  isLoading,
+  compact = false,
+}: ExplanationPanelProps) {
+  const [tab, setTab] = useState("summary");
+  const reduceMotion = useReducedMotion();
+  const resizeEase = [0.16, 1, 0.3, 1] as const;
+  const resizeTransition = reduceMotion
+    ? { duration: 0 }
+    : {
+        layout: { duration: 0.4, ease: resizeEase },
+        opacity: { duration: 0.22, ease: resizeEase },
+      };
+
   if (isLoading) {
     return (
-      <Card className="glass-card">
-        <CardHeader>
-          <Skeleton className="h-6 w-52" />
-        </CardHeader>
-        <CardContent className="space-y-3">
+      <BentoTile variant="ai" title="Explanation" icon={<BrainCircuit className="size-4" />}>
+        <div className="space-y-3">
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-4 w-5/6" />
           <Skeleton className="h-4 w-4/6" />
-        </CardContent>
-      </Card>
+          <Skeleton className="h-32 w-full" />
+        </div>
+      </BentoTile>
     );
   }
 
   if (!explanation) return null;
 
-  // Degraded mode: LLM unavailable (quota, key, service) — numeric results stand
   if (explanation.error) {
     return (
-      <Card className="glass-card border-amber-200/60">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <BrainCircuit className="h-4 w-4 text-amber-500" />
-            AI explanation
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-amber-700 bg-amber-50/70 border border-amber-200/60 rounded-lg px-3 py-2 flex items-start gap-2">
-            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-            {explanation.error}
-          </p>
-        </CardContent>
-      </Card>
+      <BentoTile variant="ai" title="Explanation" icon={<BrainCircuit className="size-4" />}>
+        <DegradedBanner message={explanation.error} />
+      </BentoTile>
     );
   }
 
-  const confidenceBadgeClass =
-    explanation.confidence_assessment === "high"
-      ? "bg-green-50 text-green-700 border-green-200"
-      : explanation.confidence_assessment === "low"
-        ? "bg-red-50 text-red-700 border-red-200"
-        : "bg-amber-50 text-amber-700 border-amber-200";
+  const confidence = explanation.confidence_assessment;
+  const confidenceStatus: "ok" | "warn" | "error" =
+    confidence === "high" ? "ok" : confidence === "low" ? "error" : "warn";
 
   const keyDrivers = explanation.key_drivers?.slice(0, 3) ?? [];
   const risks = explanation.risk_factors?.slice(0, 3) ?? [];
@@ -68,218 +74,330 @@ export function ExplanationPanel({ explanation, isLoading }: ExplanationPanelPro
   const assumptions = explanation.assumptions_used ?? [];
   const ragPipeline = explanation.rag_pipeline;
 
+  const tabBodyClass = cn(compact ? "space-y-3" : "space-y-5");
+
   return (
-    <Card className="glass-card border-sky-200/50 bg-linear-to-br from-sky-50/35 via-white/90 to-amber-50/35">
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-lg font-semibold flex items-center gap-2">
-          <BrainCircuit className="h-5 w-5 text-violet-500" />
-          Explanation
-        </CardTitle>
-        <Badge variant="outline" className={confidenceBadgeClass}>
-          {explanation.confidence_assessment} confidence
-        </Badge>
-      </CardHeader>
+    <BentoTile
+      variant="ai"
+      title="Explanation"
+      icon={<BrainCircuit className="size-4" />}
+      action={<StatusBadge status={confidenceStatus} label={`${confidence} confidence`} />}
+      className="overflow-visible"
+    >
+      <Tabs
+        value={tab}
+        onValueChange={setTab}
+        className="flex w-full flex-col gap-3"
+      >
+        <TabsList
+          aria-label="Explanation sections"
+          className="grid h-8 w-full shrink-0 grid-cols-3"
+        >
+          <TabsTrigger value="summary" className="text-xs">
+            Summary
+          </TabsTrigger>
+          <TabsTrigger value="trace" className="text-xs">
+            Steps
+          </TabsTrigger>
+          <TabsTrigger value="evidence" className="text-xs">
+            Sources
+          </TabsTrigger>
+        </TabsList>
 
-      <CardContent className="space-y-4">
-        <Tabs defaultValue="summary" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="summary">Summary</TabsTrigger>
-            <TabsTrigger value="trace">Steps</TabsTrigger>
-            <TabsTrigger value="evidence">Sources</TabsTrigger>
-          </TabsList>
+        <motion.div layout transition={resizeTransition} className="overflow-hidden">
+          <TabsContent value="summary" className="mt-0">
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key="summary"
+                initial={reduceMotion ? false : { opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={reduceMotion ? undefined : { opacity: 0 }}
+                transition={resizeTransition}
+                className={tabBodyClass}
+              >
+                <Section
+                  eyebrow="Executive summary"
+                  icon={<Sparkles className="size-3.5" aria-hidden />}
+                >
+                  <p
+                    className={cn(
+                      "leading-relaxed text-foreground",
+                      compact ? "text-sm" : "text-base",
+                    )}
+                  >
+                    {explanation.explanation_summary}
+                  </p>
+                </Section>
 
-          <TabsContent value="summary" className="space-y-4">
-            <div className="rounded-xl border border-amber-100/70 bg-white/80 p-4">
-              <p className="text-xs font-medium text-muted-foreground mb-1 inline-flex items-center gap-1">
-                <Sparkles className="h-3.5 w-3.5" /> Executive summary
-              </p>
-              <p className="text-base text-foreground/85 leading-relaxed">{explanation.explanation_summary}</p>
-            </div>
-
-            <Separator className="bg-amber-100/80" />
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              <ReportBlock title="Physical interpretation" content={explanation.physical_interpretation} />
-              <ReportBlock title="Financial insight" content={explanation.financial_insight ?? "Insufficient information"} />
-            </div>
-
-            {keyDrivers.length > 0 && (
-              <div className="rounded-xl border border-sky-100/70 bg-white/80 p-3 space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">Key drivers</p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  {keyDrivers.map((driver, index) => (
-                    <div
-                      key={`${driver.feature}-${index}`}
-                      className="rounded-lg border border-white/60 bg-white/70 px-2.5 py-2"
-                    >
-                      <p className="text-xs text-muted-foreground truncate">{driver.feature}</p>
-                      <p className="text-base font-semibold">{driver.value} {driver.unit}</p>
-                      <p className="text-sm text-foreground/75 line-clamp-2">{driver.impact}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <Separator className="bg-sky-100/80" />
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              <ReportBlock title="Uncertainty" content={explanation.uncertainty_notes || "Insufficient information"} />
-              <div className="rounded-xl border border-red-100/70 bg-white/80 p-3">
-                <p className="text-xs font-medium text-muted-foreground mb-2 inline-flex items-center gap-1">
-                  <AlertTriangle className="h-3.5 w-3.5" /> Top risks
-                </p>
-                {risks.length > 0 ? (
-                  <ul className="space-y-1.5 text-sm text-foreground/80">
-                    {risks.map((risk, idx) => (
-                      <li key={`risk-${idx}`}>- {risk}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No major risk factors reported.</p>
-                )}
-              </div>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="trace" className="space-y-4">
-            {methodology.length > 0 ? (
-              <div className="rounded-xl border border-amber-100/70 bg-white/80 p-3 space-y-2">
-                <p className="text-sm font-medium text-muted-foreground">How this was calculated</p>
-                <div className="space-y-2">
-                  {methodology.map((item, index) => (
-                    <div key={`${item.step}-${index}`} className="rounded-lg border border-white/60 bg-white/70 px-3 py-2">
-                      <p className="text-sm font-semibold text-foreground">{item.step}</p>
-                      <p className="text-xs text-muted-foreground">{item.how}</p>
-                      <p className="text-xs text-muted-foreground">{item.why}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <ReportBlock title="How this was calculated" content="No step-by-step details reported." />
-            )}
-
-            {inputTrace.length > 0 && (
-              <div className="rounded-xl border border-sky-100/70 bg-white/80 p-3 space-y-2">
-                <p className="text-sm font-medium text-muted-foreground">Inputs used</p>
-                <div className="grid grid-cols-1 gap-2">
-                  {inputTrace.slice(0, 6).map((item, index) => (
-                    <div key={`${item.name}-${index}`} className="rounded-lg border border-white/60 bg-white/70 px-3 py-2">
-                      <p className="text-sm font-semibold text-foreground">{item.name}</p>
-                      <p className="text-xs text-muted-foreground">{item.value} - {item.source}</p>
-                      <p className="text-xs text-muted-foreground">{item.impact}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {calculations.length > 0 && (
-              <div className="rounded-xl border border-violet-100/70 bg-white/80 p-3 space-y-2">
-                <p className="text-sm font-medium text-muted-foreground inline-flex items-center gap-1.5">
-                  <Calculator className="h-4 w-4" /> Key calculations
-                </p>
-                <div className="space-y-2">
-                  {calculations.map((calc, index) => (
-                    <div key={`${calc.step}-${index}`} className="rounded-lg border border-white/60 bg-white/70 px-3 py-2">
-                      <p className="text-sm font-semibold text-foreground">{calc.step}</p>
-                      <p className="text-sm text-foreground/80">{calc.result}</p>
-                      {calc.formula && <p className="text-xs text-muted-foreground">{calc.formula}</p>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {assumptions.length > 0 && (
-              <div className="rounded-xl border border-amber-100/70 bg-white/80 p-3">
-                <p className="text-sm font-medium text-muted-foreground">Assumptions</p>
-                <ul className="mt-2 space-y-1 text-sm text-foreground/80">
-                  {assumptions.slice(0, 5).map((item, index) => (
-                    <li key={`${item}-${index}`}>- {item}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="evidence" className="space-y-4">
-            {explanation.grounded_context && (
-              <div className="rounded-xl border border-sky-100/70 bg-white/80 p-3 space-y-1.5">
-                <p className="text-sm font-medium text-muted-foreground inline-flex items-center gap-1.5">
-                  <BookOpen className="h-3.5 w-3.5" /> Background
-                </p>
-                <p className="text-base text-foreground/80 leading-relaxed">{explanation.grounded_context}</p>
-              </div>
-            )}
-
-            {ragPipeline && (
-              <div className="rounded-xl border border-blue-100/70 bg-white/80 p-3 space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-medium text-muted-foreground">Sources used</p>
-                  <Badge variant="outline" className="text-xs">
-                    {ragPipeline.retrieval_count} sources
-                  </Badge>
-                </div>
-
-                {ragPipeline.query && (
-                  <div className="rounded-lg border border-white/60 bg-white/70 px-3 py-2">
-                    <p className="text-xs text-muted-foreground">Search phrase</p>
-                    <p className="text-sm text-foreground/85 leading-relaxed">{ragPipeline.query}</p>
+                {!compact ? (
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    <Block title="Physical interpretation" content={explanation.physical_interpretation} />
+                    <Block
+                      title="Financial insight"
+                      content={explanation.financial_insight ?? "Insufficient information."}
+                    />
                   </div>
-                )}
+                ) : null}
 
-                {ragPipeline.retrieved_documents?.length > 0 && (
-                  <div className="grid grid-cols-1 gap-2">
-                    {ragPipeline.retrieved_documents.slice(0, 3).map((doc, idx) => (
-                      <div key={`${doc.source}-${idx}`} className="rounded-lg border border-white/60 bg-white/70 px-3 py-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-sm font-semibold text-foreground">{doc.source}</p>
-                          <SourceDocumentTrigger
-                            source={doc.source}
-                            sourcePath={doc.source_path}
-                            excerpt={doc.snippet}
-                            variant="link"
-                          />
+                {keyDrivers.length > 0 ? (
+                  <Section eyebrow="Key drivers">
+                    <div className="space-y-0">
+                      {keyDrivers.map((driver, index) => (
+                        <div
+                          key={`${driver.feature}-${index}`}
+                          className="data-row gap-4"
+                        >
+                          <span className="min-w-0 flex-1 text-sm text-foreground">
+                            {driver.feature}
+                          </span>
+                          <span className="data-value shrink-0">
+                            {driver.value} {driver.unit}
+                          </span>
                         </div>
-                        {doc.section && <p className="text-xs text-muted-foreground">{doc.section}</p>}
-                        <p className="text-sm text-foreground/80 leading-relaxed mt-1">{doc.snippet}</p>
+                      ))}
+                    </div>
+                    {!compact ? (
+                      <div className="space-y-1.5 pt-2">
+                        {keyDrivers.map((driver, index) => (
+                          <p
+                            key={`impact-${index}`}
+                            className="text-sm leading-relaxed text-muted-foreground"
+                          >
+                            <span className="text-foreground/80">{driver.feature}.</span>{" "}
+                            {driver.impact}
+                          </p>
+                        ))}
                       </div>
+                    ) : null}
+                  </Section>
+                ) : null}
+
+                <div className={cn("grid gap-4", !compact && "lg:grid-cols-2")}>
+                  <Block
+                    title="Uncertainty"
+                    content={explanation.uncertainty_notes || "Insufficient information."}
+                  />
+                  <Section
+                    eyebrow="Top risks"
+                    icon={<AlertTriangle className="size-3.5" aria-hidden />}
+                  >
+                    {risks.length > 0 ? (
+                      <ul className="space-y-1.5 text-sm leading-relaxed text-foreground/85">
+                        {risks.map((risk, idx) => (
+                          <li key={`risk-${idx}`} className="flex gap-2">
+                            <span className="text-muted-foreground" aria-hidden>
+                              ·
+                            </span>
+                            <span className="min-w-0">{risk}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        No major risk factors reported.
+                      </p>
+                    )}
+                  </Section>
+                </div>
+              </motion.div>
+            </AnimatePresence>
+          </TabsContent>
+
+          <TabsContent value="trace" className="mt-0">
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key="trace"
+                initial={reduceMotion ? false : { opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={reduceMotion ? undefined : { opacity: 0 }}
+                transition={resizeTransition}
+                className={tabBodyClass}
+              >
+                {methodology.length > 0 ? (
+                  <Section eyebrow="Calculation steps">
+                    <div className="space-y-2">
+                      {methodology.map((item, index) => (
+                        <TilePanel key={`${item.step}-${index}`}>
+                          <p className="text-sm font-medium text-foreground">{item.step}</p>
+                          <p className="text-sm text-muted-foreground">{item.how}</p>
+                          <p className="text-xs text-muted-foreground/85">{item.why}</p>
+                        </TilePanel>
+                      ))}
+                    </div>
+                  </Section>
+                ) : (
+                  <Block title="Calculation steps" content="No step-by-step details reported." />
+                )}
+
+                {inputTrace.length > 0 ? (
+                  <Section eyebrow="Inputs">
+                    <div className="space-y-2">
+                      {inputTrace.slice(0, 6).map((item, index) => (
+                        <TilePanel key={`${item.name}-${index}`}>
+                          <p className="text-sm font-medium text-foreground">{item.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {item.value} from {item.source}
+                          </p>
+                          <p className="text-xs text-muted-foreground/85">{item.impact}</p>
+                        </TilePanel>
+                      ))}
+                    </div>
+                  </Section>
+                ) : null}
+
+                {calculations.length > 0 ? (
+                  <Section
+                    eyebrow="Key calculations"
+                    icon={<Calculator className="size-3.5" aria-hidden />}
+                  >
+                    <div className="space-y-2">
+                      {calculations.map((calc, index) => (
+                        <TilePanel key={`${calc.step}-${index}`}>
+                          <p className="text-sm font-medium text-foreground">{calc.step}</p>
+                          <p className="text-sm tabular-nums text-foreground/85">{calc.result}</p>
+                          {calc.formula ? (
+                            <p className="font-mono text-xs text-muted-foreground">
+                              {calc.formula}
+                            </p>
+                          ) : null}
+                        </TilePanel>
+                      ))}
+                    </div>
+                  </Section>
+                ) : null}
+
+                {assumptions.length > 0 ? (
+                  <Section eyebrow="Assumptions">
+                    <ul className="space-y-1.5 text-sm leading-relaxed text-foreground/85">
+                      {assumptions.slice(0, 5).map((item, index) => (
+                        <li key={`${index}`} className="flex gap-2">
+                          <span className="text-muted-foreground" aria-hidden>
+                            ·
+                          </span>
+                          <span className="min-w-0">{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </Section>
+                ) : null}
+              </motion.div>
+            </AnimatePresence>
+          </TabsContent>
+
+          <TabsContent value="evidence" className="mt-0">
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key="evidence"
+                initial={reduceMotion ? false : { opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={reduceMotion ? undefined : { opacity: 0 }}
+                transition={resizeTransition}
+                className={tabBodyClass}
+              >
+                {explanation.grounded_context ? (
+                  <Section
+                    eyebrow="Background"
+                    icon={<BookOpen className="size-3.5" aria-hidden />}
+                  >
+                    <p className="text-base leading-relaxed text-foreground/90">
+                      {explanation.grounded_context}
+                    </p>
+                  </Section>
+                ) : null}
+
+                {ragPipeline ? (
+                  <Section eyebrow={`Sources used (${ragPipeline.retrieval_count})`}>
+                    {ragPipeline.query ? (
+                      <TilePanel>
+                        <p className="data-label">Search phrase</p>
+                        <p className="text-sm leading-relaxed text-foreground/90">
+                          {ragPipeline.query}
+                        </p>
+                      </TilePanel>
+                    ) : null}
+
+                    {ragPipeline.retrieved_documents?.length > 0 ? (
+                      <div className="space-y-2">
+                        {ragPipeline.retrieved_documents.slice(0, 3).map((doc, idx) => (
+                          <TilePanel key={`${doc.source}-${idx}`}>
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-sm font-medium text-foreground">
+                                {doc.source}
+                              </p>
+                              <SourceDocumentTrigger
+                                source={doc.source}
+                                sourcePath={doc.source_path}
+                                excerpt={doc.snippet}
+                                variant="link"
+                              />
+                            </div>
+                            {doc.section ? (
+                              <p className="text-xs text-muted-foreground">{doc.section}</p>
+                            ) : null}
+                            <p className="text-sm leading-relaxed text-foreground/85">
+                              {doc.snippet}
+                            </p>
+                          </TilePanel>
+                        ))}
+                      </div>
+                    ) : null}
+                  </Section>
+                ) : null}
+
+                {citations.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {citations.map((citation, index) => (
+                      <SourceDocumentTrigger
+                        key={`${citation.source}-${citation.section ?? ""}-${index}`}
+                        source={citation.source}
+                        sourcePath={citation.source_path}
+                        label={
+                          citation.section
+                            ? `${citation.source} (${citation.section})`
+                            : citation.source
+                        }
+                      />
                     ))}
                   </div>
-                )}
-              </div>
-            )}
-
-            {citations.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {citations.map((citation, index) => (
-                  <SourceDocumentTrigger
-                    key={`${citation.source}-${citation.section ?? ""}-${index}`}
-                    source={citation.source}
-                    sourcePath={citation.source_path}
-                    label={
-                      citation.section
-                        ? `${citation.source} (${citation.section})`
-                        : citation.source
-                    }
-                  />
-                ))}
-              </div>
-            )}
+                ) : null}
+              </motion.div>
+            </AnimatePresence>
           </TabsContent>
-        </Tabs>
-      </CardContent>
-    </Card>
+        </motion.div>
+      </Tabs>
+    </BentoTile>
   );
 }
 
-function ReportBlock({ title, content }: { title: string; content: string }) {
+function Section({
+  eyebrow,
+  icon,
+  children,
+}: {
+  eyebrow: string;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="rounded-xl border border-white/45 bg-linear-to-br from-white/85 to-sky-50/30 p-3">
-      <p className="text-sm font-medium text-muted-foreground mb-1">{title}</p>
-      <p className="text-base text-foreground/80 leading-relaxed">{content}</p>
+    <div className="space-y-3">
+      <p className="data-label inline-flex items-center gap-1.5">
+        {icon}
+        {eyebrow}
+      </p>
+      {children}
     </div>
   );
+}
+
+function Block({ title, content }: { title: string; content: string }) {
+  return (
+    <div className="space-y-1.5">
+      <p className="data-label">{title}</p>
+      <p className="text-sm leading-relaxed text-foreground/85">{content}</p>
+    </div>
+  );
+}
+
+function TilePanel({ children }: { children: React.ReactNode }) {
+  return <div className="tile-panel space-y-1.5">{children}</div>;
 }

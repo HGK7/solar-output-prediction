@@ -1,13 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { BentoTile, EmptyState, ErrorState } from "@/components/bento";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, Loader2, Sparkles } from "lucide-react";
 import {
@@ -26,7 +20,16 @@ export function PortfolioInsightsCard({ sites }: PortfolioInsightsCardProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (sites.length < 2) return null;
+  if (sites.length < 2) {
+    return (
+      <BentoTile variant="ai" title="Portfolio insights" icon={<Sparkles className="size-4" />}>
+        <EmptyState
+          title="Not enough sites."
+          description="Save at least two analyzed locations."
+        />
+      </BentoTile>
+    );
+  }
 
   const generate = async () => {
     setIsLoading(true);
@@ -48,30 +51,29 @@ export function PortfolioInsightsCard({ sites }: PortfolioInsightsCardProps) {
   };
 
   return (
-    <Card className="glass-card border-amber-200/40 bg-white/85">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base flex items-center justify-between gap-2">
-          <span className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-amber-500" />
-            Portfolio insights
-          </span>
-          <Button
-            size="sm"
-            onClick={generate}
-            disabled={isLoading}
-            className="bg-amber-400 text-foreground hover:bg-amber-500"
-          >
-            {isLoading && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
-            {insights ? "Regenerate" : "Generate insights"}
-          </Button>
-        </CardTitle>
-        <CardDescription>
-          AI commentary grounded strictly in your saved run figures — numbers
-          are never recomputed by the model.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {error && <p className="text-sm text-red-500">{error}</p>}
+    <BentoTile
+      variant="ai"
+      title="Portfolio insights"
+      icon={<Sparkles className="size-4" />}
+      action={
+        <Button
+          size="sm"
+          onClick={generate}
+          disabled={isLoading}
+        >
+          {isLoading && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+          {insights ? "Regenerate" : "Generate insights"}
+        </Button>
+      }
+    >
+      <div className="space-y-3">
+        {error ? (
+          <ErrorState
+            title="Insights request failed."
+            message={error}
+            className="min-h-0"
+          />
+        ) : null}
 
         {!insights && !error && !isLoading && (
           <p className="text-sm text-muted-foreground">
@@ -90,7 +92,7 @@ export function PortfolioInsightsCard({ sites }: PortfolioInsightsCardProps) {
                 {insights.highlights.map((highlight, i) => (
                   <li
                     key={i}
-                    className="text-sm text-muted-foreground leading-relaxed pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2 before:h-1.5 before:w-1.5 before:rounded-full before:bg-amber-400"
+                    className="text-sm text-muted-foreground leading-relaxed pl-4 relative before:content-[''] before:absolute before:left-0 before:top-2 before:h-1.5 before:w-1.5 before:rounded-full before:bg-primary"
                   >
                     {highlight}
                   </li>
@@ -112,7 +114,7 @@ export function PortfolioInsightsCard({ sites }: PortfolioInsightsCardProps) {
             )}
           </>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </BentoTile>
   );
 }

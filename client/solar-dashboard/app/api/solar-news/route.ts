@@ -35,16 +35,27 @@ function extractImage(block: string): string | undefined {
   return undefined;
 }
 
+function sanitizeHttpUrl(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  const trimmed = url.trim();
+  if (trimmed.startsWith("https://") || trimmed.startsWith("http://")) {
+    return trimmed;
+  }
+  return undefined;
+}
+
 function parseFeed(xml: string): NewsItem[] {
   const items = Array.from(xml.matchAll(/<item>([\s\S]*?)<\/item>/gi));
   return items.map((match) => {
     const block = match[1] ?? "";
+    const safeLink = sanitizeHttpUrl(extractTag(block, "link")) ?? "#";
+    const safeImage = sanitizeHttpUrl(extractImage(block));
     return {
       title: extractTag(block, "title") || "Untitled",
-      link: extractTag(block, "link") || "#",
+      link: safeLink,
       pubDate: extractTag(block, "pubDate"),
       source: extractTag(block, "source") || undefined,
-      image: extractImage(block),
+      image: safeImage,
     };
   });
 }

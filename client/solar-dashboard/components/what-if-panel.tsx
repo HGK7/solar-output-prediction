@@ -1,17 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { BentoTile } from "@/components/bento";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, Play, RotateCcw, SlidersHorizontal } from "lucide-react";
 import { whatIf } from "@/lib/api";
 import type { FinancialSummary, PredictionResult } from "@/types";
+import { cn } from "@/lib/utils";
 
 interface WhatIfPanelProps {
   prediction: PredictionResult | null;
   baseline: FinancialSummary | null;
+  compact?: boolean;
 }
 
 interface InputState {
@@ -21,7 +23,7 @@ interface InputState {
 }
 
 const LIMITS = {
-  capacityKw: { min: 0.5, max: 100000 },
+  capacityKw: { min: 0.5, max: 5000 },
   tariffUsd: { min: 0.01, max: 2 },
   performanceRatio: { min: 0.5, max: 0.95 },
 } as const;
@@ -47,11 +49,11 @@ function formatDelta(
   const better = options?.invert ? delta < 0 : delta > 0;
   return {
     text: `${delta > 0 ? "+" : ""}${delta.toFixed(digits)}${options?.suffix ?? ""}`,
-    className: better ? "text-emerald-600" : "text-red-500",
+    className: better ? "text-status-ok" : "text-status-error",
   };
 }
 
-export function WhatIfPanel({ prediction, baseline }: WhatIfPanelProps) {
+export function WhatIfPanel({ prediction, baseline, compact = false }: WhatIfPanelProps) {
   const baselineParams = baseline?.system_parameters;
 
   const initialInputs = useMemo<InputState>(
@@ -185,60 +187,54 @@ export function WhatIfPanel({ prediction, baseline }: WhatIfPanelProps) {
       key: "capacityKw",
       label: "System capacity (kW)",
       step: "0.5",
-      hint: `${LIMITS.capacityKw.min}–${LIMITS.capacityKw.max.toLocaleString()}`,
+      hint: `${LIMITS.capacityKw.min} to ${LIMITS.capacityKw.max.toLocaleString()}`,
       invalid: parsed.capacityKw === null,
     },
     {
       key: "tariffUsd",
       label: "Electricity tariff ($/kWh)",
       step: "0.01",
-      hint: `${LIMITS.tariffUsd.min}–${LIMITS.tariffUsd.max}`,
+      hint: `${LIMITS.tariffUsd.min} to ${LIMITS.tariffUsd.max}`,
       invalid: parsed.tariffUsd === null,
     },
     {
       key: "performanceRatio",
       label: "Performance ratio",
       step: "0.01",
-      hint: `${LIMITS.performanceRatio.min}–${LIMITS.performanceRatio.max}`,
+      hint: `${LIMITS.performanceRatio.min} to ${LIMITS.performanceRatio.max}`,
       invalid: parsed.performanceRatio === null,
     },
   ];
 
   return (
-    <Card className="glass-card">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base flex items-center justify-between gap-2">
-          <span className="flex items-center gap-2">
-            <SlidersHorizontal className="h-4 w-4 text-amber-500" />
-            What-if simulator
-          </span>
-          {(isDirty || result) && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={reset}
-            >
-              <RotateCcw className="h-3 w-3 mr-1" />
-              Reset
-            </Button>
-          )}
-        </CardTitle>
-        <p className="text-xs text-muted-foreground">
-          Adjust system parameters and simulate — finances recompute
-          deterministically from the same irradiance prediction.
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-5">
+    <BentoTile
+      title="Simulator"
+      description={compact ? undefined : "Recompute finances from the same irradiance prediction."}
+      icon={<SlidersHorizontal className="size-4" />}
+      action={
+        (isDirty || result) ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={reset}
+          >
+            <RotateCcw className="h-3 w-3 mr-1" />
+            Reset
+          </Button>
+        ) : undefined
+      }
+    >
+      <div className={cn("space-y-3", compact && "space-y-2")}>
         <form
-          className="flex flex-wrap items-end gap-4"
+          className="flex flex-wrap items-end gap-3"
           onSubmit={(e) => {
             e.preventDefault();
             void runSimulation();
           }}
         >
           {fields.map((field) => (
-            <div key={field.key} className="space-y-1.5 min-w-36 flex-1">
+            <div key={field.key} className="min-w-28 flex-1 space-y-1">
               <Label
                 htmlFor={`what-if-${field.key}`}
                 className="text-xs text-muted-foreground"
@@ -257,15 +253,14 @@ export function WhatIfPanel({ prediction, baseline }: WhatIfPanelProps) {
                 aria-invalid={field.invalid}
                 className={field.invalid ? "border-red-400" : undefined}
               />
-              <p className={`text-[10px] ${field.invalid ? "text-red-500" : "text-muted-foreground/70"}`}>
-                Range: {field.hint}
-              </p>
+              {field.invalid ? (
+                <p className="text-[10px] text-destructive">Range: {field.hint}</p>
+              ) : null}
             </div>
           ))}
           <Button
             type="submit"
             disabled={!allValid || isLoading}
-            className="bg-amber-400 text-foreground hover:bg-amber-500"
           >
             {isLoading ? (
               <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
@@ -276,33 +271,45 @@ export function WhatIfPanel({ prediction, baseline }: WhatIfPanelProps) {
           </Button>
         </form>
 
-        {error && <p className="text-xs text-red-500">{error}</p>}
+        {error && <p className="text-xs text-destructive">{error}</p>}
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-xs text-muted-foreground border-b border-white/40">
-                <th className="text-left font-medium py-1.5">Metric</th>
-                <th className="text-right font-medium py-1.5">Baseline</th>
-                <th className="text-right font-medium py-1.5">What-if</th>
-                <th className="text-right font-medium py-1.5">Δ</th>
+              <tr className="border-b border-tile-border text-xs text-muted-foreground">
+                <th className="py-2 text-left font-medium">Metric</th>
+                <th className="py-2 text-right font-medium">Baseline</th>
+                <th className="py-2 text-right font-medium">What-if</th>
+                <th className="py-2 text-right font-medium">Delta</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.label} className="border-b border-white/20 last:border-0">
-                  <td className="py-1.5 text-muted-foreground">{row.label}</td>
-                  <td className="py-1.5 text-right">{row.baseline}</td>
-                  <td className="py-1.5 text-right font-medium">{row.current}</td>
-                  <td className={`py-1.5 text-right text-xs ${row.delta?.className ?? "text-muted-foreground"}`}>
-                    {row.delta?.text ?? "—"}
+                <tr
+                  key={row.label}
+                  className="border-b border-tile-border/60 last:border-0"
+                >
+                  <td className="py-2 text-muted-foreground">{row.label}</td>
+                  <td className="py-2 text-right tabular-nums text-foreground/85">
+                    {row.baseline}
+                  </td>
+                  <td className="py-2 text-right font-medium tabular-nums text-foreground">
+                    {row.current}
+                  </td>
+                  <td
+                    className={cn(
+                      "py-2 text-right text-xs tabular-nums",
+                      row.delta?.className ?? "text-muted-foreground",
+                    )}
+                  >
+                    {row.delta?.text ?? "·"}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </BentoTile>
   );
 }

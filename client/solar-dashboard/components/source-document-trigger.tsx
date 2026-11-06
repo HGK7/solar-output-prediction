@@ -54,7 +54,7 @@ export function SourceDocumentTrigger({
       <button
         type="button"
         onClick={openModal}
-        className={`text-xs text-sky-700 inline-flex items-center gap-1 hover:underline ${className ?? ""}`}
+        className={`text-xs text-primary inline-flex items-center gap-1 hover:underline ${className ?? ""}`}
       >
         <FileText className="h-3.5 w-3.5" />
         View source

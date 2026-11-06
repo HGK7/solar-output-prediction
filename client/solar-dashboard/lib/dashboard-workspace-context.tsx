@@ -33,6 +33,8 @@ export type LoadingStage =
   | "error";
 
 const DASHBOARD_WORKSPACE_KEY = "solar-dashboard:workspace";
+const LEGACY_INPUTS_KEY = "solar-dashboard:workspace-inputs";
+const PERSIST_DEBOUNCE_MS = 300;
 
 const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
   installationType: "rooftop",
@@ -44,13 +46,17 @@ const DEFAULT_SYSTEM_CONFIG: SystemConfig = {
   performanceRatio: 0.78,
 };
 
-type DashboardWorkspaceSnapshot = {
+/** Only durable Guest Mode inputs — never full Analysis results. */
+type PersistedWorkspaceInputs = {
   lat: number;
   lon: number;
+  locationName: string;
   systemConfig: SystemConfig;
+};
+
+type DashboardWorkspaceSnapshot = PersistedWorkspaceInputs & {
   stage: LoadingStage;
   unsavedAnalysis: boolean;
-  locationName: string;
   prediction: PredictionResult | null;
   financial: FinancialSummary | null;
   explanation: ExplanationResponse | null;
@@ -88,7 +94,7 @@ type DashboardResultsPatch = Pick<
 >;
 
 type DashboardWorkspaceAction =
-  | { type: "hydrate"; payload: Partial<DashboardWorkspaceSnapshot> }
+  | { type: "hydrate"; payload: Partial<PersistedWorkspaceInputs> }
   | { type: "patchWorkspace"; payload: Partial<DashboardWorkspacePatch> }
   | { type: "patchLifecycle"; payload: Partial<DashboardLifecyclePatch> }
   | { type: "patchResults"; payload: Partial<DashboardResultsPatch> }
@@ -115,17 +121,17 @@ const INITIAL_STATE: DashboardWorkspaceState = {
   activeDocuments: [],
 };
 
-function isValidStage(stage: unknown): stage is LoadingStage {
-  return (
-    stage === "idle" ||
-    stage === "location" ||
-    stage === "prediction" ||
-    stage === "physics" ||
-    stage === "financial" ||
-    stage === "explanation" ||
-    stage === "complete" ||
-    stage === "error"
-  );
+function pickPersistedInputs(
+  raw: Partial<PersistedWorkspaceInputs> & Record<string, unknown>,
+): Partial<PersistedWorkspaceInputs> {
+  const next: Partial<PersistedWorkspaceInputs> = {};
+  if (typeof raw.lat === "number" && Number.isFinite(raw.lat)) next.lat = raw.lat;
+  if (typeof raw.lon === "number" && Number.isFinite(raw.lon)) next.lon = raw.lon;
+  if (typeof raw.locationName === "string") next.locationName = raw.locationName;
+  if (raw.systemConfig && typeof raw.systemConfig === "object") {
+    next.systemConfig = { ...DEFAULT_SYSTEM_CONFIG, ...(raw.systemConfig as SystemConfig) };
+  }
+  return next;
 }
 
 function dashboardWorkspaceReducer(
@@ -133,14 +139,8 @@ function dashboardWorkspaceReducer(
   action: DashboardWorkspaceAction,
 ): DashboardWorkspaceState {
   switch (action.type) {
-    case "hydrate": {
-      const nextStage = isValidStage(action.payload.stage) ? action.payload.stage : state.stage;
-      return {
-        ...state,
-        ...action.payload,
-        stage: nextStage,
-      };
-    }
+    case "hydrate":
+      return { ...state, ...action.payload };
     case "patchWorkspace":
       return { ...state, ...action.payload };
     case "patchLifecycle":
@@ -162,6 +162,7 @@ function dashboardWorkspaceReducer(
         error: null,
         saveStatus: null,
         activeDocuments: [],
+        stage: "idle",
       };
     default:
       return state;
@@ -215,10 +216,9 @@ const DashboardWorkspaceContext = createContext<DashboardWorkspaceContextValue |
 
 export function DashboardWorkspaceProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(dashboardWorkspaceReducer, INITIAL_STATE);
-
   const hydratedRef = useRef(false);
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Core dispatch wrappers with useCallback to maintain stable references
   const resetResults = useCallback(() => {
     dispatch({ type: "resetResults" });
   }, []);
@@ -235,47 +235,104 @@ export function DashboardWorkspaceProvider({ children }: { children: ReactNode }
     dispatch({ type: "patchResults", payload: patch });
   }, []);
 
-  // Simplified setters - call dispatch wrappers directly (no additional layers)
-  const setLat = (next: number) => updateWorkspace({ lat: next });
-  const setLon = (next: number) => updateWorkspace({ lon: next });
-  const setSystemConfig = (next: SystemConfig) => updateWorkspace({ systemConfig: next });
-  const setStage = (next: LoadingStage) => updateLifecycle({ stage: next });
-  const setUnsavedAnalysis = (next: boolean) => updateWorkspace({ unsavedAnalysis: next });
-  const setError = (next: string | null) => updateLifecycle({ error: next });
-  const setLocationName = (next: string) => updateWorkspace({ locationName: next });
-  const setSaveStatus = (next: string | null) => updateWorkspace({ saveStatus: next });
-  const setPrediction = (next: PredictionResult | null) => updateResults({ prediction: next });
-  const setFinancial = (next: FinancialSummary | null) => updateResults({ financial: next });
-  const setExplanation = (next: ExplanationResponse | null) => updateResults({ explanation: next });
-  const setMonthly = (next: Record<string, MonthlyData> | null) => updateResults({ monthly: next });
-  const setGeometry = (next: GeometryResult | null) => updateResults({ geometry: next });
-  const setDataProvenance = (next: DataProvenance | null) => updateResults({ dataProvenance: next });
-  const setAnnualAverages = (next: Record<string, number> | null) => updateResults({ annualAverages: next });
-  const setPhysicsSimulation = (next: PhysicsSimulationResult | null) => updateResults({ physicsSimulation: next });
-  const setMlVsPhysicsDelta = (next: MLPhysicsDelta | null) => updateResults({ mlVsPhysicsDelta: next });
-  const setActiveDocuments = (next: string[]) => updateLifecycle({ activeDocuments: next });
+  const setLat = useCallback((next: number) => updateWorkspace({ lat: next }), [updateWorkspace]);
+  const setLon = useCallback((next: number) => updateWorkspace({ lon: next }), [updateWorkspace]);
+  const setSystemConfig = useCallback(
+    (next: SystemConfig) => updateWorkspace({ systemConfig: next }),
+    [updateWorkspace],
+  );
+  const setStage = useCallback(
+    (next: LoadingStage) => updateLifecycle({ stage: next }),
+    [updateLifecycle],
+  );
+  const setUnsavedAnalysis = useCallback(
+    (next: boolean) => updateWorkspace({ unsavedAnalysis: next }),
+    [updateWorkspace],
+  );
+  const setError = useCallback(
+    (next: string | null) => updateLifecycle({ error: next }),
+    [updateLifecycle],
+  );
+  const setLocationName = useCallback(
+    (next: string) => updateWorkspace({ locationName: next }),
+    [updateWorkspace],
+  );
+  const setSaveStatus = useCallback(
+    (next: string | null) => updateWorkspace({ saveStatus: next }),
+    [updateWorkspace],
+  );
+  const setPrediction = useCallback(
+    (next: PredictionResult | null) => updateResults({ prediction: next }),
+    [updateResults],
+  );
+  const setFinancial = useCallback(
+    (next: FinancialSummary | null) => updateResults({ financial: next }),
+    [updateResults],
+  );
+  const setExplanation = useCallback(
+    (next: ExplanationResponse | null) => updateResults({ explanation: next }),
+    [updateResults],
+  );
+  const setMonthly = useCallback(
+    (next: Record<string, MonthlyData> | null) => updateResults({ monthly: next }),
+    [updateResults],
+  );
+  const setGeometry = useCallback(
+    (next: GeometryResult | null) => updateResults({ geometry: next }),
+    [updateResults],
+  );
+  const setDataProvenance = useCallback(
+    (next: DataProvenance | null) => updateResults({ dataProvenance: next }),
+    [updateResults],
+  );
+  const setAnnualAverages = useCallback(
+    (next: Record<string, number> | null) => updateResults({ annualAverages: next }),
+    [updateResults],
+  );
+  const setPhysicsSimulation = useCallback(
+    (next: PhysicsSimulationResult | null) => updateResults({ physicsSimulation: next }),
+    [updateResults],
+  );
+  const setMlVsPhysicsDelta = useCallback(
+    (next: MLPhysicsDelta | null) => updateResults({ mlVsPhysicsDelta: next }),
+    [updateResults],
+  );
+  const setActiveDocuments = useCallback(
+    (next: string[]) => updateLifecycle({ activeDocuments: next }),
+    [updateLifecycle],
+  );
 
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem(DASHBOARD_WORKSPACE_KEY);
-      if (!raw) {
-        hydratedRef.current = true;
-        return;
-      }
-
-      try {
-        const snapshot = JSON.parse(raw) as Partial<DashboardWorkspaceSnapshot>;
-        dispatch({ type: "hydrate", payload: snapshot });
-      } catch (err) {
-        // Corrupted localStorage entry — clear it and continue with defaults.
-        try {
-          console.warn("Failed to parse dashboard workspace from localStorage, clearing corrupted key.", err);
-          window.localStorage.removeItem(DASHBOARD_WORKSPACE_KEY);
-        } catch { }
+      const raw =
+        window.localStorage.getItem(DASHBOARD_WORKSPACE_KEY) ??
+        window.localStorage.getItem(LEGACY_INPUTS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<PersistedWorkspaceInputs> &
+          Record<string, unknown>;
+        const inputs = pickPersistedInputs(parsed);
+        if (Object.keys(inputs).length > 0) {
+          dispatch({ type: "hydrate", payload: inputs });
+        }
+        // Rewrite compact key; drop legacy bloated snapshots.
+        window.localStorage.setItem(
+          DASHBOARD_WORKSPACE_KEY,
+          JSON.stringify({
+            lat: inputs.lat ?? INITIAL_STATE.lat,
+            lon: inputs.lon ?? INITIAL_STATE.lon,
+            locationName: inputs.locationName ?? "",
+            systemConfig: inputs.systemConfig ?? DEFAULT_SYSTEM_CONFIG,
+          } satisfies PersistedWorkspaceInputs),
+        );
+        window.localStorage.removeItem(LEGACY_INPUTS_KEY);
       }
     } catch (err) {
-      // Unexpected environment error while reading localStorage — continue with defaults.
-      console.warn("Error while accessing localStorage for dashboard workspace:", err);
+      console.warn("Dashboard workspace hydrate failed:", err);
+      try {
+        window.localStorage.removeItem(DASHBOARD_WORKSPACE_KEY);
+      } catch {
+        /* ignore */
+      }
     } finally {
       hydratedRef.current = true;
     }
@@ -284,12 +341,25 @@ export function DashboardWorkspaceProvider({ children }: { children: ReactNode }
   useEffect(() => {
     if (!hydratedRef.current) return;
 
-    const snapshot: DashboardWorkspaceSnapshot = {
-      ...state,
-    };
+    if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    persistTimerRef.current = setTimeout(() => {
+      const inputs: PersistedWorkspaceInputs = {
+        lat: state.lat,
+        lon: state.lon,
+        locationName: state.locationName,
+        systemConfig: state.systemConfig,
+      };
+      try {
+        window.localStorage.setItem(DASHBOARD_WORKSPACE_KEY, JSON.stringify(inputs));
+      } catch (err) {
+        console.warn("Dashboard workspace persist failed:", err);
+      }
+    }, PERSIST_DEBOUNCE_MS);
 
-    window.localStorage.setItem(DASHBOARD_WORKSPACE_KEY, JSON.stringify(snapshot));
-  }, [state]);
+    return () => {
+      if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    };
+  }, [state.lat, state.lon, state.locationName, state.systemConfig]);
 
   const value = useMemo<DashboardWorkspaceContextValue>(
     () => ({
@@ -334,10 +404,53 @@ export function DashboardWorkspaceProvider({ children }: { children: ReactNode }
       updateResults,
       resetResults,
     }),
-    [state],
+    [
+      state.lat,
+      state.lon,
+      state.systemConfig,
+      state.stage,
+      state.unsavedAnalysis,
+      state.error,
+      state.locationName,
+      state.saveStatus,
+      state.prediction,
+      state.financial,
+      state.explanation,
+      state.monthly,
+      state.geometry,
+      state.dataProvenance,
+      state.annualAverages,
+      state.physicsSimulation,
+      state.mlVsPhysicsDelta,
+      state.activeDocuments,
+      updateWorkspace,
+      setLat,
+      setLon,
+      setSystemConfig,
+      updateLifecycle,
+      setStage,
+      setUnsavedAnalysis,
+      setError,
+      setLocationName,
+      setSaveStatus,
+      setPrediction,
+      setFinancial,
+      setExplanation,
+      setMonthly,
+      setGeometry,
+      setDataProvenance,
+      setAnnualAverages,
+      setPhysicsSimulation,
+      setMlVsPhysicsDelta,
+      setActiveDocuments,
+      updateResults,
+      resetResults,
+    ],
   );
 
-  return <DashboardWorkspaceContext.Provider value={value}>{children}</DashboardWorkspaceContext.Provider>;
+  return (
+    <DashboardWorkspaceContext.Provider value={value}>{children}</DashboardWorkspaceContext.Provider>
+  );
 }
 
 export function useDashboardWorkspace() {

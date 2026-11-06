@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { BentoTile } from "@/components/bento";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Compass,
@@ -40,26 +40,29 @@ export function RecommendationsCard({
 }: RecommendationsCardProps) {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
-  const params = financial?.system_parameters;
+  const systemParameters = financial?.system_parameters;
 
   useEffect(() => {
-    if (!prediction || !params) {
+    if (!prediction || !systemParameters) {
       setRecommendations([]);
+      setLoadError(false);
       return;
     }
 
     let cancelled = false;
     setIsLoading(true);
+    setLoadError(false);
 
     getRecommendations({
       predictedIrradianceKwhM2Day: prediction.prediction,
       financialOverrides: {
-        region: params.region,
-        system_capacity_kw: params.capacity_kw,
-        panel_efficiency: params.panel_efficiency,
-        performance_ratio: params.performance_ratio,
-        electricity_tariff_usd: params.electricity_tariff_usd_kwh,
+        region: systemParameters.region,
+        system_capacity_kw: systemParameters.capacity_kw,
+        panel_efficiency: systemParameters.panel_efficiency,
+        performance_ratio: systemParameters.performance_ratio,
+        electricity_tariff_usd: systemParameters.electricity_tariff_usd_kwh,
       },
       lat,
       lon,
@@ -68,7 +71,10 @@ export function RecommendationsCard({
         if (!cancelled) setRecommendations(response.recommendations);
       })
       .catch(() => {
-        if (!cancelled) setRecommendations([]);
+        if (!cancelled) {
+          setRecommendations([]);
+          setLoadError(true);
+        }
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
@@ -77,53 +83,44 @@ export function RecommendationsCard({
     return () => {
       cancelled = true;
     };
-  }, [prediction, params, lat, lon]);
+  }, [prediction, systemParameters, lat, lon]);
 
   if (!prediction || !financial) return null;
-  if (!isLoading && recommendations.length === 0) return null;
 
   return (
-    <Card className="glass-card">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base flex items-center gap-2">
-          <Lightbulb className="h-4 w-4 text-amber-500" />
-          Recommendations
-        </CardTitle>
-        <p className="text-xs text-muted-foreground">
-          Computed deterministically from your prediction — sources open in the
-          document viewer.
+    <BentoTile title="Recommendations" icon={<Lightbulb className="size-4" />}>
+      {isLoading && recommendations.length === 0 ? (
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Skeleton className="h-16 rounded-lg" />
+          <Skeleton className="h-16 rounded-lg" />
+        </div>
+      ) : loadError ? (
+        <p className="text-sm text-muted-foreground">
+          Recommendations unavailable. Try again after re-running analysis.
         </p>
-      </CardHeader>
-      <CardContent className="grid gap-3 sm:grid-cols-2">
-        {isLoading && recommendations.length === 0 ? (
-          <>
-            <Skeleton className="h-24 rounded-xl" />
-            <Skeleton className="h-24 rounded-xl" />
-          </>
-        ) : (
-          recommendations.map((rec) => {
+      ) : recommendations.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No specific recommendations for this configuration.
+        </p>
+      ) : (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {recommendations.map((rec) => {
             const Icon = ICONS[rec.id] ?? Lightbulb;
             return (
-              <div
-                key={rec.id}
-                className="rounded-xl border border-white/40 bg-white/50 backdrop-blur-sm p-3.5 space-y-2"
-              >
+              <div key={rec.id} className="tile-panel space-y-1.5">
                 <div className="flex items-center gap-2">
-                  <Icon className="h-4 w-4 text-amber-500 shrink-0" />
-                  <h4 className="text-sm font-medium">{rec.title}</h4>
+                  <Icon className="size-3.5 shrink-0 text-primary" />
+                  <h4 className="text-sm font-medium text-foreground">{rec.title}</h4>
                 </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
+                <p className="line-clamp-3 text-sm leading-snug text-muted-foreground">
                   {rec.detail}
                 </p>
-                <SourceDocumentTrigger
-                  source={rec.source_document}
-                  className="bg-sky-50/50 text-sky-700 border-sky-200/50"
-                />
+                <SourceDocumentTrigger source={rec.source_document} />
               </div>
             );
-          })
-        )}
-      </CardContent>
-    </Card>
+          })}
+        </div>
+      )}
+    </BentoTile>
   );
 }

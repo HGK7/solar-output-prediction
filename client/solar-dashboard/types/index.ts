@@ -45,6 +45,8 @@ export interface PredictionResult {
   };
   feature_importance: Record<string, number>;
   prediction_context?: PredictionContext;
+  ood_warning?: boolean;
+  ood_details?: string[];
 }
 
 // ── Financial ──
@@ -102,6 +104,28 @@ export interface FinancialSummary {
   lifetime_savings_usd: number;
   lifetime_roi_pct: number;
   lcoe_usd_per_kwh: number;
+  incentive_amount_usd?: number;
+  incentive_summary?: string;
+  net_system_cost_usd?: number;
+  monthly_savings_usd?: number;
+  battery_summary?: {
+    included: boolean;
+    capacity_kwh: number;
+    chemistry: string;
+    gross_cost_usd: number;
+    replacement_year: number | null;
+    replacement_cost_usd: number;
+    self_consumption_pct: number;
+  };
+  sizing_guidance?: {
+    inferred_monthly_consumption_kwh: number | null;
+    recommended_capacity_kw: number | null;
+    max_capacity_by_roof_kw: number | null;
+    required_roof_area_m2: number;
+    required_roof_area_sqft: number;
+    estimated_panels: number;
+    roof_area_constrained: boolean;
+  };
   cost_breakdown?: CostBreakdown;
   output_calculation?: OutputCalculation;
   system_parameters: SystemParameters;
@@ -299,6 +323,13 @@ export interface RAGResponse {
   is_refusal?: boolean;
   refusal_reason?: string | null;
   raw_response?: boolean;
+  tool_calls?: Array<{
+    tool: string;
+    inputs: Record<string, unknown>;
+    result_summary: string;
+    metrics?: Record<string, unknown>;
+  }>;
+  key_source?: "byok" | "system" | "none";
 }
 
 export interface ChatMessage {
@@ -307,6 +338,13 @@ export interface ChatMessage {
   content: string;
   citations?: RAGCitation[];
   timestamp: Date;
+  tool_calls?: Array<{
+    tool: string;
+    inputs: Record<string, unknown>;
+    result_summary: string;
+    metrics?: Record<string, unknown>;
+  }>;
+  key_source?: "byok" | "system" | "none";
 }
 
 // ── UI State ──
@@ -320,6 +358,15 @@ export type SavedPanelTechnology = "monocrystalline" | "polycrystalline" | "thin
 export type SavedGridConnection = "grid-tied" | "hybrid" | "off-grid";
 export type SavedRegionType = "india" | "usa" | "europe" | "global";
 
+export type PlanningScale = "homeowner" | "small_business" | "industrial";
+export type PlanningGoal = "lowest_payback" | "max_offset" | "backup_resilience";
+
+export interface PlanningProfile {
+  scale: PlanningScale;
+  jurisdiction: SavedRegionType;
+  goal: PlanningGoal;
+}
+
 export interface SavedSystemConfig {
   installationType: SavedInstallationType;
   panelTechnology: SavedPanelTechnology;
@@ -328,6 +375,13 @@ export interface SavedSystemConfig {
   systemCapacityKw: number;
   electricityTariffUsd: number;
   performanceRatio: number;
+  model?: "linear_regression" | "svm" | "random_forest" | "hist_gradient_boosting";
+  batteryCapacityKwh?: number;
+  includeIncentives?: boolean;
+  monthlyBillUsd?: number;
+  monthlyConsumptionKwh?: number;
+  availableRoofAreaM2?: number;
+  planningProfile?: PlanningProfile;
 }
 
 export interface SavedRunSummary {
@@ -341,6 +395,8 @@ export interface SavedRunSummary {
 export interface SavedAnalysisRun {
   id: string;
   createdAt: string;
+  label?: string;
+  systemConfig: SavedSystemConfig;
   summary: SavedRunSummary;
   result: AnalysisResult;
 }
@@ -360,6 +416,7 @@ export interface SavedLocationRecord {
   metadata: SavedLocationMetadata;
   createdAt: string;
   updatedAt: string;
+  runs: SavedAnalysisRun[];
   latestRun: SavedAnalysisRun | null;
 }
 

@@ -18,6 +18,7 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import { CalendarRange } from "lucide-react";
+import { EmptyState } from "@/components/bento";
 import type { SavedLocationRecord } from "@/types";
 
 const MONTHS = [
@@ -40,7 +41,7 @@ const PALETTE = [
   "var(--chart-2)",
 ];
 
-interface PortfolioForecastChartProps {
+interface PortfolioProductionChartProps {
   locations: SavedLocationRecord[];
 }
 
@@ -48,7 +49,7 @@ function seriesKey(name: string, index: number) {
   return `site_${index}_${name.replace(/[^a-zA-Z0-9]/g, "_")}`;
 }
 
-export function PortfolioForecastChart({ locations }: PortfolioForecastChartProps) {
+export function PortfolioProductionChart({ locations }: PortfolioProductionChartProps) {
   const { chartData, chartConfig, siteCount } = useMemo(() => {
     // Same deterministic formula the backend financial service uses:
     // monthly kWh = irradiance (PSH) × capacity × performance ratio × days
@@ -88,18 +89,28 @@ export function PortfolioForecastChart({ locations }: PortfolioForecastChartProp
     return { chartData: data, chartConfig: config, siteCount: sites.length };
   }, [locations]);
 
-  if (siteCount === 0) return null;
+  if (siteCount === 0) {
+    return (
+      <Card className="bento-tile border-tile-border shadow-xs">
+        <CardContent className="p-6">
+          <EmptyState
+            title="No production chart data."
+            description="Saved runs need monthly climate series."
+          />
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
-    <Card className="glass-card border-sky-200/40 bg-white/85">
+    <Card className="bento-tile border-tile-border shadow-xs">
       <CardHeader className="pb-2">
         <CardTitle className="text-base flex items-center gap-2">
-          <CalendarRange className="h-4 w-4 text-sky-500" />
-          Monthly production forecast
+          <CalendarRange className="h-4 w-4 text-primary" />
+          Estimated monthly production
         </CardTitle>
         <CardDescription>
-          Estimated monthly output per site (irradiance × capacity ×
-          performance ratio), stacked across the portfolio.
+          Estimated monthly energy production per site.
           {siteCount === MAX_SERIES ? ` Showing first ${MAX_SERIES} sites.` : ""}
         </CardDescription>
       </CardHeader>

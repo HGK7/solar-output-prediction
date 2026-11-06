@@ -1,0 +1,130 @@
+@import "tailwindcss";
+
+:root {
+  /* Core Surfaces (Warm Alabaster Light Palette) */
+  --background: oklch(0.98 0.008 95);          /* #FAF8F5 Warm Alabaster Canvas */
+  --foreground: oklch(0.141 0.005 285);        /* #18181B Deep Zinc Primary Ink */
+
+  --tile: oklch(0.995 0.004 95);               /* #FEFDFB Surface / Architectural Plane */
+  --tile-elevated: oklch(1 0 0);               /* #FFFFFF Elevated Drawer / Popover */
+  --tile-inset: oklch(0.96 0.006 95);          /* #F3F1EC Recessed Input / Well */
+  --tile-border: oklch(0.92 0.008 95);         /* #E6E3DC 1px Hairline Rule */
+
+  /* Brand & Interactive Tokens */
+  --primary: oklch(0.828 0.189 84.429);        /* #F59E0B Solar Amber */
+  --primary-foreground: oklch(0.141 0.005 285);/* #18181B Deep Zinc Ink on Amber */
+
+  --muted: oklch(0.96 0.006 95);               /* #F3F1EC Subtle Muted Surface */
+  --muted-foreground: oklch(0.552 0.016 285);  /* #71717A Muted Technical Ink */
+
+  /* Domain & Semantic Accents (Charts, Capex Ledger & Inline Diffs) */
+  --solar-amber: oklch(0.828 0.189 84.429);    /* #F59E0B Primary Solar Trajectory */
+  --solar-sky: oklch(0.685 0.169 237.323);     /* #0EA5E9 Clear-Sky Ceiling & Watermark */
+  --instrument-stage: #0B2236;                 /* Prussian Cyanotype Heliodon Stage */
+
+  --status-ok: oklch(0.62 0.17 145);           /* #16A34A Favorable Delta / Subsidy */
+  --status-warn: oklch(0.75 0.16 75);          /* #D97706 Roof / Climate Warning */
+  --status-error: oklch(0.577 0.245 27.325);   /* #DC2626 Unfavorable Delta */
+
+  /* Shadcn Compatibility Aliases */
+  --card: var(--tile);
+  --card-foreground: var(--foreground);
+  --popover: var(--tile-elevated);
+  --popover-foreground: var(--foreground);
+  --secondary: var(--tile-inset);
+  --secondary-foreground: var(--foreground);
+  --accent: var(--tile-inset);
+  --accent-foreground: var(--foreground);
+  --destructive: var(--status-error);
+  --destructive-foreground: oklch(0.98 0.008 95);
+  --border: var(--tile-border);
+  --input: var(--tile-border);
+  --ring: var(--solar-amber);
+
+  /* Typography & Geometry */
+  --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-serif: 'Newsreader', Georgia, serif;
+  --font-mono: 'IBM Plex Mono', 'Geist Mono', monospace;
+  --radius: 0.25rem; /* 4px crisp architectural default */
+}
+
+.dark {
+  --background: oklch(0.12 0.01 285);          /* #09090B Deep Zinc Canvas */
+  --foreground: oklch(0.96 0.005 285);         /* #F4F4F5 Primary Light Ink */
+
+  --tile: oklch(0.16 0.008 285);               /* #121215 Dark Surface Tile */
+  --tile-elevated: oklch(0.19 0.008 285);      /* #18181C Elevated Drawer */
+  --tile-inset: oklch(0.13 0.008 285);         /* #0D0D10 Recessed Well */
+  --tile-border: rgba(255, 255, 255, 0.12);    /* Hairline Divider */
+
+  --primary: oklch(0.828 0.189 84.429);        /* #F59E0B Solar Amber */
+  --primary-foreground: oklch(0.141 0.005 285);/* #18181B Deep Zinc Ink on Amber */
+
+  --muted: oklch(0.16 0.008 285);
+  --muted-foreground: oklch(0.68 0.015 285);   /* #A1A1AA Muted Ink */
+
+  --solar-amber: oklch(0.828 0.189 84.429);
+  --solar-sky: oklch(0.685 0.169 237.323);
+  --instrument-stage: #071624;
+
+  --status-ok: oklch(0.68 0.17 145);
+  --status-warn: oklch(0.78 0.16 75);
+  --status-error: oklch(0.63 0.22 27.325);
+
+  --card: var(--tile);
+  --card-foreground: var(--foreground);
+  --popover: var(--tile-elevated);
+  --popover-foreground: var(--foreground);
+  --secondary: var(--tile-inset);
+  --secondary-foreground: var(--foreground);
+  --accent: var(--tile-inset);
+  --accent-foreground: var(--foreground);
+  --destructive: var(--status-error);
+  --destructive-foreground: var(--foreground);
+  --border: var(--tile-border);
+  --input: var(--tile-border);
+  --ring: var(--solar-amber);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-tile: var(--tile);
+  --color-tile-elevated: var(--tile-elevated);
+  --color-tile-inset: var(--tile-inset);
+  --color-tile-border: var(--tile-border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-solar-amber: var(--solar-amber);
+  --color-solar-sky: var(--solar-sky);
+  --color-instrument-stage: var(--instrument-stage);
+  --color-status-ok: var(--status-ok);
+  --color-status-warn: var(--status-warn);
+  --color-status-error: var(--status-error);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+  --font-mono: var(--font-mono);
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased selection:bg-solar-amber/25 selection:text-foreground;
+  }
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}

@@ -23,7 +23,7 @@ export default function NotFound() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center justify-center gap-3">
-          <Button asChild className="bg-amber-400 text-foreground hover:bg-amber-500">
+          <Button asChild >
             <Link href="/">
               <Home className="h-4 w-4" />
               Back to Home

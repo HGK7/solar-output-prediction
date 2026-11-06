@@ -4,15 +4,22 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   AnalysisResult,
   Coordinates,
+  PlanningGoal,
+  PlanningProfile,
+  PlanningScale,
   SavedAnalysisRun,
+  SavedGridConnection,
+  SavedInstallationType,
   SavedLocationMetadata,
   SavedLocationRecord,
   SavedLocationsStoreState,
+  SavedPanelTechnology,
+  SavedRegionType,
   SavedSystemConfig,
 } from "@/types";
 
 const STORAGE_KEY = "solar-dashboard:saved-locations";
-const STORE_VERSION = 1;
+const STORE_VERSION = 3;
 
 const EMPTY_STATE: SavedLocationsStoreState = {
   version: STORE_VERSION,
@@ -71,72 +78,208 @@ function normalizeMetadata(value: unknown): SavedLocationMetadata {
   };
 }
 
-function normalizeSystemConfig(value: unknown): SavedSystemConfig {
-  if (!isRecord(value)) {
-    return DEFAULT_SYSTEM_CONFIG;
+function isSavedRegion(value: unknown): value is SavedRegionType {
+  return value === "india" || value === "usa" || value === "europe" || value === "global";
+}
+
+function isSavedInstallationType(value: unknown): value is SavedInstallationType {
+  return value === "rooftop" || value === "ground-mounted" || value === "carport";
+}
+
+function isSavedPanelTechnology(value: unknown): value is SavedPanelTechnology {
+  return value === "monocrystalline" || value === "polycrystalline" || value === "thin-film";
+}
+
+function isSavedGridConnection(value: unknown): value is SavedGridConnection {
+  return value === "grid-tied" || value === "hybrid" || value === "off-grid";
+}
+
+function isPlanningScale(value: unknown): value is PlanningScale {
+  return value === "homeowner" || value === "small_business" || value === "industrial";
+}
+
+function isPlanningGoal(value: unknown): value is PlanningGoal {
+  return value === "lowest_payback" || value === "max_offset" || value === "backup_resilience";
+}
+
+function normalizePlanningProfile(value: unknown): PlanningProfile | undefined {
+  if (!isRecord(value)) return undefined;
+  if (!isPlanningScale(value.scale) || !isSavedRegion(value.jurisdiction) || !isPlanningGoal(value.goal)) {
+    return undefined;
   }
+  return {
+    scale: value.scale,
+    jurisdiction: value.jurisdiction,
+    goal: value.goal,
+  };
+}
+
+function inferPanelTechnologyFromEfficiency(efficiency?: number): SavedPanelTechnology | undefined {
+  if (typeof efficiency !== "number" || !Number.isFinite(efficiency)) return undefined;
+  if (efficiency >= 0.185) return "monocrystalline";
+  if (efficiency >= 0.14) return "polycrystalline";
+  return "thin-film";
+}
+
+function inferSystemConfigFromResult(
+  result: AnalysisResult,
+  fallbackConfig?: SavedSystemConfig,
+): SavedSystemConfig {
+  const base = fallbackConfig ?? DEFAULT_SYSTEM_CONFIG;
+  const sysParams = isRecord(result?.financial?.system_parameters)
+    ? result.financial.system_parameters
+    : null;
+  const physAssumptions = isRecord(result?.physics_simulation?.assumptions)
+    ? result.physics_simulation.assumptions
+    : null;
+
+  const region =
+    sysParams && isSavedRegion(sysParams.region)
+      ? sysParams.region
+      : base.region;
+
+  const systemCapacityKw =
+    sysParams && typeof sysParams.capacity_kw === "number" && Number.isFinite(sysParams.capacity_kw)
+      ? sysParams.capacity_kw
+      : physAssumptions && typeof physAssumptions.system_capacity_kw === "number" && Number.isFinite(physAssumptions.system_capacity_kw)
+        ? physAssumptions.system_capacity_kw
+        : base.systemCapacityKw;
+
+  const electricityTariffUsd =
+    sysParams && typeof sysParams.electricity_tariff_usd_kwh === "number" && Number.isFinite(sysParams.electricity_tariff_usd_kwh)
+      ? sysParams.electricity_tariff_usd_kwh
+      : base.electricityTariffUsd;
+
+  const performanceRatio =
+    sysParams && typeof sysParams.performance_ratio === "number" && Number.isFinite(sysParams.performance_ratio)
+      ? sysParams.performance_ratio
+      : physAssumptions && typeof physAssumptions.performance_ratio === "number" && Number.isFinite(physAssumptions.performance_ratio)
+        ? physAssumptions.performance_ratio
+        : base.performanceRatio;
+
+  const panelTechnology =
+    physAssumptions && isSavedPanelTechnology(physAssumptions.panel_technology)
+      ? physAssumptions.panel_technology
+      : inferPanelTechnologyFromEfficiency(sysParams?.panel_efficiency) ?? base.panelTechnology;
+
+  const installationType =
+    physAssumptions && isSavedInstallationType(physAssumptions.installation_type)
+      ? physAssumptions.installation_type
+      : base.installationType;
+
+  const modelUsed = result?.prediction?.model_used;
+  const model =
+    modelUsed === "linear_regression" ||
+    modelUsed === "svm" ||
+    modelUsed === "random_forest" ||
+    modelUsed === "hist_gradient_boosting"
+      ? modelUsed
+      : base.model;
+
+  const batteryCapacityKwh =
+    result?.financial?.battery_summary && typeof result.financial.battery_summary.capacity_kwh === "number"
+      ? result.financial.battery_summary.capacity_kwh
+      : base.batteryCapacityKwh;
 
   return {
-    installationType:
-      value.installationType === "ground-mounted" ||
-        value.installationType === "carport" ||
-        value.installationType === "rooftop"
-        ? value.installationType
-        : DEFAULT_SYSTEM_CONFIG.installationType,
-    panelTechnology:
-      value.panelTechnology === "polycrystalline" ||
-        value.panelTechnology === "thin-film" ||
-        value.panelTechnology === "monocrystalline"
-        ? value.panelTechnology
-        : DEFAULT_SYSTEM_CONFIG.panelTechnology,
-    gridConnection:
-      value.gridConnection === "hybrid" ||
-        value.gridConnection === "off-grid" ||
-        value.gridConnection === "grid-tied"
-        ? value.gridConnection
-        : DEFAULT_SYSTEM_CONFIG.gridConnection,
-    region:
-      value.region === "india" || value.region === "usa" || value.region === "europe" || value.region === "global"
-        ? value.region
-        : DEFAULT_SYSTEM_CONFIG.region,
+    ...base,
+    installationType,
+    panelTechnology,
+    gridConnection: base.gridConnection,
+    region,
+    systemCapacityKw,
+    electricityTariffUsd,
+    performanceRatio,
+    ...(model ? { model } : {}),
+    ...(batteryCapacityKwh !== undefined ? { batteryCapacityKwh } : {}),
+  };
+}
+
+function normalizeSystemConfig(value: unknown, fallback: SavedSystemConfig = DEFAULT_SYSTEM_CONFIG): SavedSystemConfig {
+  if (!isRecord(value)) {
+    return { ...fallback };
+  }
+
+  const normalized: SavedSystemConfig = {
+    installationType: isSavedInstallationType(value.installationType)
+      ? value.installationType
+      : fallback.installationType,
+    panelTechnology: isSavedPanelTechnology(value.panelTechnology)
+      ? value.panelTechnology
+      : fallback.panelTechnology,
+    gridConnection: isSavedGridConnection(value.gridConnection)
+      ? value.gridConnection
+      : fallback.gridConnection,
+    region: isSavedRegion(value.region)
+      ? value.region
+      : fallback.region,
     systemCapacityKw:
       typeof value.systemCapacityKw === "number" && Number.isFinite(value.systemCapacityKw)
         ? value.systemCapacityKw
-        : DEFAULT_SYSTEM_CONFIG.systemCapacityKw,
+        : fallback.systemCapacityKw,
     electricityTariffUsd:
       typeof value.electricityTariffUsd === "number" && Number.isFinite(value.electricityTariffUsd)
         ? value.electricityTariffUsd
-        : DEFAULT_SYSTEM_CONFIG.electricityTariffUsd,
+        : fallback.electricityTariffUsd,
     performanceRatio:
       typeof value.performanceRatio === "number" && Number.isFinite(value.performanceRatio)
         ? value.performanceRatio
-        : DEFAULT_SYSTEM_CONFIG.performanceRatio,
+        : fallback.performanceRatio,
   };
-}
 
-function normalizeLocationRecord(value: unknown): SavedLocationRecord | null {
-  if (!isRecord(value) || typeof value.id !== "string" || typeof value.name !== "string") {
-    return null;
+  if (
+    value.model === "linear_regression" ||
+    value.model === "svm" ||
+    value.model === "random_forest" ||
+    value.model === "hist_gradient_boosting"
+  ) {
+    normalized.model = value.model;
+  } else if (fallback.model) {
+    normalized.model = fallback.model;
   }
 
-  return {
-    id: value.id,
-    name: value.name,
-    coordinates:
-      isRecord(value.coordinates) &&
-        typeof value.coordinates.lat === "number" &&
-        typeof value.coordinates.lon === "number"
-        ? { lat: value.coordinates.lat, lon: value.coordinates.lon }
-        : { lat: 0, lon: 0 },
-    systemConfig: normalizeSystemConfig(value.systemConfig),
-    metadata: normalizeMetadata(value.metadata),
-    createdAt: typeof value.createdAt === "string" ? value.createdAt : new Date().toISOString(),
-    updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : new Date().toISOString(),
-    latestRun: normalizeSavedRun(value.latestRun),
-  };
+  if (typeof value.batteryCapacityKwh === "number" && Number.isFinite(value.batteryCapacityKwh)) {
+    normalized.batteryCapacityKwh = value.batteryCapacityKwh;
+  } else if (fallback.batteryCapacityKwh !== undefined) {
+    normalized.batteryCapacityKwh = fallback.batteryCapacityKwh;
+  }
+
+  if (typeof value.includeIncentives === "boolean") {
+    normalized.includeIncentives = value.includeIncentives;
+  } else if (fallback.includeIncentives !== undefined) {
+    normalized.includeIncentives = fallback.includeIncentives;
+  }
+
+  if (typeof value.monthlyBillUsd === "number" && Number.isFinite(value.monthlyBillUsd)) {
+    normalized.monthlyBillUsd = value.monthlyBillUsd;
+  } else if (fallback.monthlyBillUsd !== undefined) {
+    normalized.monthlyBillUsd = fallback.monthlyBillUsd;
+  }
+
+  if (typeof value.monthlyConsumptionKwh === "number" && Number.isFinite(value.monthlyConsumptionKwh)) {
+    normalized.monthlyConsumptionKwh = value.monthlyConsumptionKwh;
+  } else if (fallback.monthlyConsumptionKwh !== undefined) {
+    normalized.monthlyConsumptionKwh = fallback.monthlyConsumptionKwh;
+  }
+
+  if (typeof value.availableRoofAreaM2 === "number" && Number.isFinite(value.availableRoofAreaM2)) {
+    normalized.availableRoofAreaM2 = value.availableRoofAreaM2;
+  } else if (fallback.availableRoofAreaM2 !== undefined) {
+    normalized.availableRoofAreaM2 = fallback.availableRoofAreaM2;
+  }
+
+  const planningProfile = normalizePlanningProfile(value.planningProfile) ?? fallback.planningProfile;
+  if (planningProfile) {
+    normalized.planningProfile = planningProfile;
+  }
+
+  return normalized;
 }
 
-function normalizeSavedRun(value: unknown): SavedAnalysisRun | null {
+export function normalizeSavedRun(
+  value: unknown,
+  parentSystemConfig?: SavedSystemConfig,
+): SavedAnalysisRun | null {
   if (!isRecord(value)) return null;
 
   if (typeof value.id !== "string" || typeof value.createdAt !== "string") return null;
@@ -156,9 +299,18 @@ function normalizeSavedRun(value: unknown): SavedAnalysisRun | null {
   const result = isRecord(value.result) ? (value.result as unknown as AnalysisResult) : null;
   if (!result || !isRecord(result.prediction) || !isRecord(result.financial)) return null;
 
+  const inferredFallback = inferSystemConfigFromResult(result, parentSystemConfig);
+  const systemConfig = isRecord(value.systemConfig)
+    ? normalizeSystemConfig(value.systemConfig, inferredFallback)
+    : inferredFallback;
+
+  const label = typeof value.label === "string" && value.label.trim().length > 0 ? value.label.trim() : undefined;
+
   return {
     id: value.id,
     createdAt: value.createdAt,
+    ...(label ? { label } : {}),
+    systemConfig,
     summary: {
       annualOutputKwh: summary.annualOutputKwh,
       annualSavingsUsd: summary.annualSavingsUsd,
@@ -166,11 +318,45 @@ function normalizeSavedRun(value: unknown): SavedAnalysisRun | null {
       confidence: summary.confidence,
       modelUsed: summary.modelUsed,
     },
-    result: result,
+    result,
   };
 }
 
-function toSafeState(value: unknown): SavedLocationsStoreState {
+export function normalizeLocationRecord(value: unknown): SavedLocationRecord | null {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.name !== "string") {
+    return null;
+  }
+
+  const locationSystemConfig = normalizeSystemConfig(value.systemConfig);
+  const legacyLatestRun = normalizeSavedRun(value.latestRun, locationSystemConfig);
+  const runs = Array.isArray(value.runs)
+    ? value.runs
+        .map((run) => normalizeSavedRun(run, locationSystemConfig))
+        .filter((item): item is SavedAnalysisRun => item !== null)
+    : legacyLatestRun
+      ? [legacyLatestRun]
+      : [];
+  const latestRun = runs.length > 0 ? runs[runs.length - 1] : null;
+
+  return {
+    id: value.id,
+    name: value.name,
+    coordinates:
+      isRecord(value.coordinates) &&
+      typeof value.coordinates.lat === "number" &&
+      typeof value.coordinates.lon === "number"
+        ? { lat: value.coordinates.lat, lon: value.coordinates.lon }
+        : { lat: 0, lon: 0 },
+    systemConfig: locationSystemConfig,
+    metadata: normalizeMetadata(value.metadata),
+    createdAt: typeof value.createdAt === "string" ? value.createdAt : new Date().toISOString(),
+    updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : new Date().toISOString(),
+    runs,
+    latestRun,
+  };
+}
+
+export function toSafeState(value: unknown): SavedLocationsStoreState {
   if (!value || typeof value !== "object") {
     return EMPTY_STATE;
   }
@@ -208,7 +394,10 @@ export function writeLocationsStore(state: SavedLocationsStoreState) {
       locations: state.locations,
     }),
   );
+  window.dispatchEvent(new Event(LOCATIONS_CHANGED_EVENT));
 }
+
+export const LOCATIONS_CHANGED_EVENT = "solar-dashboard:locations-changed";
 
 export interface CreateLocationInput {
   name: string;
@@ -226,15 +415,27 @@ function normalizeLocationName(name: string): string {
   return trimmed;
 }
 
-export function createSavedRunFromAnalysis(result: AnalysisResult): SavedAnalysisRun {
+export function createSavedRunFromAnalysis(
+  result: AnalysisResult,
+  systemConfig?: SavedSystemConfig,
+  label?: string,
+): SavedAnalysisRun {
+  const inferred = inferSystemConfigFromResult(result, systemConfig);
+  const finalSystemConfig = systemConfig
+    ? normalizeSystemConfig(systemConfig, inferred)
+    : inferred;
+  const trimmedLabel = typeof label === "string" && label.trim().length > 0 ? label.trim() : undefined;
+
   return {
     id: createId(),
     createdAt: new Date().toISOString(),
+    ...(trimmedLabel ? { label: trimmedLabel } : {}),
+    systemConfig: finalSystemConfig,
     summary: {
       annualOutputKwh: result.financial.annual_output_kwh,
       annualSavingsUsd: result.financial.annual_savings_usd,
       paybackYears: result.financial.simple_payback_years,
-      confidence: result.explanation.confidence_assessment,
+      confidence: result.explanation?.confidence_assessment ?? "low",
       modelUsed: result.prediction.model_used,
     },
     result,
@@ -249,7 +450,7 @@ export function createLocationRecord(input: CreateLocationInput): SavedLocationR
     id: createId(),
     name,
     coordinates: input.coordinates,
-    systemConfig: input.systemConfig,
+    systemConfig: normalizeSystemConfig(input.systemConfig),
     metadata: {
       ...DEFAULT_LOCATION_METADATA,
       ...input.metadata,
@@ -257,6 +458,7 @@ export function createLocationRecord(input: CreateLocationInput): SavedLocationR
     },
     createdAt: now,
     updatedAt: now,
+    runs: [],
     latestRun: null,
   };
 }
@@ -267,6 +469,7 @@ export function useLocationsStore() {
 
   useEffect(() => {
     const state = readLocationsStore();
+    // Keep user portfolio only — never inject sample reference sites into saved locations.
     setLocations(state.locations);
     setIsHydrated(true);
   }, []);
@@ -307,12 +510,29 @@ export function useLocationsStore() {
       prev.map((location) =>
         location.id === locationId
           ? {
-            ...location,
-            latestRun: run,
-            updatedAt: new Date().toISOString(),
-          }
+              ...location,
+              runs: [...location.runs, run],
+              latestRun: run,
+              updatedAt: new Date().toISOString(),
+            }
           : location,
       ),
+    );
+  }, []);
+
+  const deleteRun = useCallback((locationId: string, runId: string) => {
+    setLocations((prev) =>
+      prev.map((location) => {
+        if (location.id !== locationId) return location;
+        const nextRuns = location.runs.filter((run) => run.id !== runId);
+        const nextLatest = nextRuns.length > 0 ? nextRuns[nextRuns.length - 1] : null;
+        return {
+          ...location,
+          runs: nextRuns,
+          latestRun: nextLatest,
+          updatedAt: new Date().toISOString(),
+        };
+      }),
     );
   }, []);
 
@@ -329,6 +549,7 @@ export function useLocationsStore() {
       removeLocation,
       getLocationById,
       attachRun,
+      deleteRun,
       clearAll,
       setLocations,
     }),
@@ -340,6 +561,7 @@ export function useLocationsStore() {
       removeLocation,
       getLocationById,
       attachRun,
+      deleteRun,
       clearAll,
     ],
   );

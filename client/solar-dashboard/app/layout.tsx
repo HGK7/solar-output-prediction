@@ -1,18 +1,35 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { IBM_Plex_Mono, IBM_Plex_Sans, Newsreader } from "next/font/google";
 import "./globals.css";
 import { BackendStatusProvider } from "@/lib/backend-status-context";
 import { GuestPreferencesProvider } from "@/lib/guest-preferences-context";
+import { ZenithPreferencesProvider } from "@/context/zenith-preferences-context";
+import { TopNav } from "@/components/layout/top-nav";
+import { Toaster } from "@/components/ui/sonner";
 
-const inter = Inter({
-  variable: "--font-sans",
+const ibmPlexSans = IBM_Plex_Sans({
+  variable: "--font-ibm-plex-sans",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
+
+const newsreader = Newsreader({
+  variable: "--font-newsreader",
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  style: ["normal", "italic"],
+});
+
+const ibmPlexMono = IBM_Plex_Mono({
+  variable: "--font-ibm-plex-mono",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
 });
 
 export const metadata: Metadata = {
-  title: "Solar Intelligence Dashboard",
+  title: "Zenith",
   description:
-    "AI-powered solar energy analysis — predict output, evaluate ROI, and get expert recommendations for any location worldwide.",
+    "Swiss photogrammetric solar intelligence workbench and 25-year financial ledger for residential, commercial, and utility-scale solar planning.",
 };
 
 export default function RootLayout({
@@ -22,13 +39,19 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${inter.variable} font-sans antialiased`}>
+      <body
+        className={`${ibmPlexSans.variable} ${newsreader.variable} ${ibmPlexMono.variable} min-h-dvh bg-[#FAF8F5] text-[#18181B] font-sans antialiased selection:bg-[#F59E0B] selection:text-[#18181B]`}
+      >
         <GuestPreferencesProvider>
-          <BackendStatusProvider>
-            <div className="flex h-dvh flex-col overflow-x-hidden overflow-y-auto bg-linear-to-br from-yellow-50 via-sky-50 to-white">
-              <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">{children}</div>
-            </div>
-          </BackendStatusProvider>
+          <ZenithPreferencesProvider>
+            <BackendStatusProvider>
+              <TopNav />
+              <div className="mx-auto max-w-[1440px] border-x border-[#E6E3DC] min-h-[calc(100dvh-60px)] bg-[#FAF8F5]">
+                {children}
+              </div>
+              <Toaster position="bottom-right" richColors={false} />
+            </BackendStatusProvider>
+          </ZenithPreferencesProvider>
         </GuestPreferencesProvider>
       </body>
     </html>

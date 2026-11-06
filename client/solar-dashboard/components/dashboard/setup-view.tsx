@@ -1,21 +1,29 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+"use client";
+
+import { Lock, MapPin, RotateCcw, WifiOff } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { BentoGrid, BentoTile } from "@/components/bento";
 import { SystemConfigPanel, type SystemConfig } from "@/components/system-config-panel";
-import { MapPin, ChartNoAxesColumn } from "lucide-react";
 
 interface SetupViewProps {
   lat: number;
   lon: number;
   isLoading: boolean;
   systemConfig: SystemConfig;
+  baselineConfig?: SystemConfig | null;
   annualAverages: Record<string, number> | null;
   stage: string;
   showEmptyState: boolean;
+  apiOffline: boolean;
+  locationLocked: boolean;
+  locationLockedLabel: string | null;
   onLatChange: (next: number) => void;
   onLonChange: (next: number) => void;
   onSystemConfigChange: (next: SystemConfig) => void;
   onAnalyze: () => void;
+  onExitReanalysis?: () => void;
   LocationMapComponent: React.ComponentType<{
     lat: number;
     lon: number;
@@ -24,34 +32,153 @@ interface SetupViewProps {
   }>;
 }
 
+function computeConfigChangeBadges(
+  baseline: SystemConfig | null | undefined,
+  current: SystemConfig,
+): string[] {
+  if (!baseline) return [];
+  const diffs: string[] = [];
+
+  if (Math.abs(baseline.systemCapacityKw - current.systemCapacityKw) >= 0.05) {
+    diffs.push(
+      `Capacity: ${baseline.systemCapacityKw} -> ${current.systemCapacityKw} kW`,
+    );
+  }
+  if (baseline.panelTechnology !== current.panelTechnology) {
+    diffs.push(`Panel: ${baseline.panelTechnology} -> ${current.panelTechnology}`);
+  }
+  if (baseline.installationType !== current.installationType) {
+    diffs.push(
+      `Mount: ${baseline.installationType} -> ${current.installationType}`,
+    );
+  }
+  if (baseline.gridConnection !== current.gridConnection) {
+    diffs.push(`Grid: ${baseline.gridConnection} -> ${current.gridConnection}`);
+  }
+  if (Math.abs(baseline.electricityTariffUsd - current.electricityTariffUsd) >= 0.001) {
+    diffs.push(
+      `Tariff: $${baseline.electricityTariffUsd} -> $${current.electricityTariffUsd}/kWh`,
+    );
+  }
+  if (Math.abs(baseline.performanceRatio - current.performanceRatio) >= 0.005) {
+    diffs.push(
+      `PR: ${baseline.performanceRatio.toFixed(2)} -> ${current.performanceRatio.toFixed(2)}`,
+    );
+  }
+  if ((baseline.model ?? "hist_gradient_boosting") !== (current.model ?? "hist_gradient_boosting")) {
+    diffs.push(
+      `Model: ${(baseline.model ?? "hist_gradient_boosting").replace(/_/g, " ")} -> ${(current.model ?? "hist_gradient_boosting").replace(/_/g, " ")}`,
+    );
+  }
+  if ((baseline.batteryCapacityKwh ?? 0) !== (current.batteryCapacityKwh ?? 0)) {
+    diffs.push(
+      `Battery: ${baseline.batteryCapacityKwh ?? "auto"} -> ${current.batteryCapacityKwh ?? "auto"} kWh`,
+    );
+  }
+  if ((baseline.includeIncentives ?? true) !== (current.includeIncentives ?? true)) {
+    diffs.push(
+      `Subsidies: ${(baseline.includeIncentives ?? true) ? "on" : "off"} -> ${(current.includeIncentives ?? true) ? "on" : "off"}`,
+    );
+  }
+
+  return diffs;
+}
+
 export function SetupView({
   lat,
   lon,
   isLoading,
   systemConfig,
-  annualAverages,
-  stage,
-  showEmptyState,
+  baselineConfig = null,
+  apiOffline,
+  locationLocked,
+  locationLockedLabel,
   onLatChange,
   onLonChange,
   onSystemConfigChange,
   onAnalyze,
+  onExitReanalysis,
   LocationMapComponent,
 }: SetupViewProps) {
-  return (
-    <>
-      <section className="space-y-6">
-        <div className="space-y-2">
-          <h2 className="text-xl font-semibold flex items-center gap-2">
-            <MapPin className="h-5 w-5 text-sky-400" />
-            Select location
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Search for a city to zoom, then click the map or drag the pin for precise coordinates.
-          </p>
-        </div>
+  const changedParamBadges = locationLocked
+    ? computeConfigChangeBadges(baselineConfig, systemConfig)
+    : [];
 
-        <div className="mx-auto max-w-5xl">
+  return (
+    <div className="relative flex flex-col gap-5 pb-24">
+      {locationLocked ? (
+        <Alert className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-col gap-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <AlertTitle className="inline-flex items-center gap-1.5 text-sm font-semibold">
+                <Lock className="size-3.5 text-primary" aria-hidden />
+                Re-analysing {locationLockedLabel ?? "saved site"}
+              </AlertTitle>
+              <Badge variant="outline" className="font-mono text-xs">
+                {lat.toFixed(4)}, {lon.toFixed(4)}
+              </Badge>
+            </div>
+            {changedParamBadges.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-muted-foreground">Modified vs. latest run:</span>
+                {changedParamBadges.map((item) => (
+                  <Badge
+                    key={item}
+                    variant="secondary"
+                    className="font-mono text-xs font-normal"
+                  >
+                    {item}
+                  </Badge>
+                ))}
+              </div>
+            ) : (
+              <AlertDescription className="text-xs">
+                Coordinates are fixed to this site. Adjust capacity, storage, or panel type below to compare against the latest run.
+              </AlertDescription>
+            )}
+          </div>
+          {onExitReanalysis ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onExitReanalysis}
+              className="shrink-0"
+            >
+              <RotateCcw className="mr-1.5 size-3.5" aria-hidden />
+              New site
+            </Button>
+          ) : null}
+        </Alert>
+      ) : null}
+
+      {apiOffline ? (
+        <Alert variant="destructive">
+          <WifiOff className="size-4" aria-hidden />
+          <AlertTitle>Backend API offline</AlertTitle>
+          <AlertDescription>
+            Configure your site parameters below. Analysis will enable automatically when the API reconnects.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      <BentoGrid className="auto-rows-min items-start">
+        <BentoTile
+          title="Select location"
+          description={
+            locationLocked
+              ? "Coordinates are fixed to compare runs at this site."
+              : "Search for a city, then click the map or drag the pin."
+          }
+          icon={<MapPin className="size-4" />}
+          colSpan={2}
+          action={
+            <Badge variant="outline" className="font-mono text-xs font-normal">
+              {lat.toFixed(4)}, {lon.toFixed(4)}
+            </Badge>
+          }
+          className="min-h-[360px]"
+        >
           <LocationMapComponent
             lat={lat}
             lon={lon}
@@ -59,79 +186,46 @@ export function SetupView({
               onLatChange(nextLat);
               onLonChange(nextLon);
             }}
-            disabled={isLoading}
+            disabled={isLoading || locationLocked}
           />
-        </div>
-      </section>
+        </BentoTile>
 
-      <section className="space-y-6">
-        <SystemConfigPanel
-          value={systemConfig}
-          onChange={onSystemConfigChange}
-          lat={lat}
-          lon={lon}
-          onLatChange={onLatChange}
-          onLonChange={onLonChange}
-          disabled={isLoading}
-        />
-
-        <div className="flex justify-center">
-          <Button
-            className="w-full max-w-xs bg-amber-400 text-foreground shadow-md shadow-amber-200/40 hover:bg-amber-500"
-            onClick={onAnalyze}
+        <BentoTile
+          title="System setup"
+          description="Size your system from your monthly bill or configure custom hardware."
+          colSpan={2}
+        >
+          <SystemConfigPanel
+            value={systemConfig}
+            onChange={onSystemConfigChange}
+            lat={lat}
+            lon={lon}
+            onLatChange={onLatChange}
+            onLonChange={onLonChange}
             disabled={isLoading}
+            coordinatesLocked={locationLocked}
+          />
+        </BentoTile>
+      </BentoGrid>
+
+      <div className="sticky bottom-0 z-10 -mx-6 border-t border-tile-border bg-background/95 px-6 py-4 backdrop-blur-sm md:-mx-10 lg:-mx-12">
+        <div className="mx-auto flex max-w-3xl justify-center">
+          <Button
+            className="w-full max-w-md"
+            size="lg"
+            onClick={onAnalyze}
+            disabled={isLoading || apiOffline}
           >
-            {isLoading ? "Analyzing..." : "Analyze solar potential"}
+            {apiOffline
+              ? "API offline"
+              : isLoading
+                ? "Analyzing..."
+                : locationLocked
+                  ? `Run re-analysis for ${locationLockedLabel ?? "site"}`
+                  : "Run analysis"}
           </Button>
         </div>
-
-        <Card className="glass-card border-sky-200/40">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <ChartNoAxesColumn className="h-4 w-4 text-sky-400" />
-              Location average solar inputs
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            {stage === "location" && !annualAverages ? (
-              <>
-                <Skeleton className="h-4 w-3/4" />
-                <Skeleton className="h-4 w-2/3" />
-                <Skeleton className="h-4 w-1/2" />
-              </>
-            ) : annualAverages ? (
-              <div className="space-y-1 text-muted-foreground">
-                <p>
-                  Temperature: <span className="font-medium text-foreground">{annualAverages.Temperature?.toFixed(2)} C</span>
-                </p>
-                <p>
-                  Humidity: <span className="font-medium text-foreground">{annualAverages.Humidity?.toFixed(2)} %</span>
-                </p>
-                <p>
-                  Wind Speed: <span className="font-medium text-foreground">{annualAverages["Wind Speed"]?.toFixed(2)} m/s</span>
-                </p>
-                <p>
-                  Clear Sky Irradiance: <span className="font-medium text-foreground">{annualAverages["Clear Sky Irradiance"]?.toFixed(2)} kWh/m2/day</span>
-                </p>
-              </div>
-            ) : (
-              <p className="text-muted-foreground">Run analysis to load local averages.</p>
-            )}
-          </CardContent>
-        </Card>
-
-        {showEmptyState && (
-          <Card className="glass-card border-amber-200/50 bg-linear-to-br from-amber-50/40 via-white/90 to-sky-50/40">
-            <CardHeader>
-              <CardTitle>Start your first analysis</CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground space-y-2">
-              <p>Set your location, confirm system configuration, and run analysis.</p>
-              <p>Results will show prediction, engineering check, costs, and explanation.</p>
-            </CardContent>
-          </Card>
-        )}
-      </section>
-    </>
+      </div>
+    </div>
   );
 }

@@ -8,6 +8,7 @@ interface CoordinateInputProps {
   lon: number;
   onLatChange: (lat: number) => void;
   onLonChange: (lon: number) => void;
+  disabled?: boolean;
 }
 
 export function CoordinateInput({
@@ -15,6 +16,7 @@ export function CoordinateInput({
   lon,
   onLatChange,
   onLonChange,
+  disabled = false,
 }: CoordinateInputProps) {
   return (
     <div className="flex gap-4">
@@ -29,12 +31,13 @@ export function CoordinateInput({
           min={-90}
           max={90}
           value={lat}
+          disabled={disabled}
           onChange={(e) => {
             const v = parseFloat(e.target.value);
             if (!isNaN(v) && v >= -90 && v <= 90) onLatChange(v);
           }}
           placeholder="-90 to 90"
-          className="bg-white/70 backdrop-blur-md border-white/40"
+          className="bg-tile border-tile-border"
         />
       </div>
       <div className="flex-1 space-y-2">
@@ -48,12 +51,13 @@ export function CoordinateInput({
           min={-180}
           max={180}
           value={lon}
+          disabled={disabled}
           onChange={(e) => {
             const v = parseFloat(e.target.value);
             if (!isNaN(v) && v >= -180 && v <= 180) onLonChange(v);
           }}
           placeholder="-180 to 180"
-          className="bg-white/70 backdrop-blur-md border-white/40"
+          className="bg-tile border-tile-border"
         />
       </div>
     </div>

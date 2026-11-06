@@ -1,26 +1,45 @@
+"use client";
+
+import { useMemo } from "react";
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { toast } from "sonner";
+import { BentoGrid, BentoGridCell } from "@/components/bento";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Loader2 } from "lucide-react";
-import { PredictionCard } from "@/components/prediction-card";
+import { OutputEngineeringCard } from "@/components/output-engineering-card";
 import { FinancialCard } from "@/components/financial-card";
 import { OutputChart } from "@/components/output-chart";
 import { ExplanationPanel } from "@/components/explanation-panel";
 import { WhatIfPanel } from "@/components/what-if-panel";
 import { RecommendationsCard } from "@/components/recommendations-card";
+import { computeFullRunDiff } from "@/lib/run-summary-delta";
 import type { StreamingState } from "@/lib/use-streaming-analysis";
+import type { SystemConfig } from "@/components/system-config-panel";
+import type { SavedAnalysisRun } from "@/types";
 
 interface ResultsViewProps {
   analysis: StreamingState;
   lat: number | null;
   lon: number | null;
+  systemConfig?: SystemConfig;
+  previousRun?: SavedAnalysisRun | null;
+  reanalysisLocationName?: string | null;
   locationsCount: number;
   saveDialogOpen: boolean;
   saveName: string;
+  /** Re-analysis preset: save without asking for "Location name" again. */
+  skipSaveNamePrompt?: boolean;
   canSaveAnalysis: boolean;
   effectiveDelta: {
     delta_kwh: number;
@@ -38,9 +57,13 @@ export function ResultsView({
   analysis,
   lat,
   lon,
+  systemConfig,
+  previousRun = null,
+  reanalysisLocationName = null,
   locationsCount,
   saveDialogOpen,
   saveName,
+  skipSaveNamePrompt = false,
   canSaveAnalysis,
   effectiveDelta,
   saveStatus,
@@ -50,65 +73,170 @@ export function ResultsView({
   onAnalyzeNewLocation,
   onOpenLocations,
 }: ResultsViewProps) {
+  const handleSave = () => {
+    const valid = skipSaveNamePrompt
+      ? canSaveAnalysis
+      : canSaveAnalysis && saveName.trim().length > 0;
+    if (!valid) return;
+    onSave();
+    toast.success(
+      skipSaveNamePrompt
+        ? `Saved new run to ${reanalysisLocationName ?? "site"}`
+        : "Analysis saved",
+    );
+  };
+
+  const fullDiff = useMemo(() => {
+    if (!previousRun || !analysis.prediction || !analysis.financial) {
+      return null;
+    }
+
+    const fallbackConfig = systemConfig ?? previousRun.systemConfig;
+    const currentRunPreview: SavedAnalysisRun = {
+      id: "preview-run",
+      createdAt: new Date().toISOString(),
+      systemConfig: fallbackConfig,
+      summary: {
+        annualOutputKwh: analysis.financial.annual_output_kwh,
+        annualSavingsUsd: analysis.financial.annual_savings_usd,
+        paybackYears: analysis.financial.simple_payback_years,
+        confidence: analysis.explanation?.confidence_assessment ?? "medium",
+        modelUsed: analysis.prediction.model_used,
+      },
+      result: {
+        prediction: analysis.prediction,
+        financial: analysis.financial,
+        explanation:
+          analysis.explanation ?? {
+            explanation_summary: "",
+            key_drivers: [],
+            physical_interpretation: "",
+            uncertainty_notes: "",
+            risk_factors: [],
+            confidence_assessment: "medium",
+            financial_insight: null,
+          },
+        geometry: analysis.geometry ?? undefined,
+        monthly: analysis.monthly ?? undefined,
+        data_provenance: analysis.dataProvenance ?? undefined,
+        physics_simulation: analysis.physicsSimulation ?? undefined,
+        ml_vs_physics_delta: analysis.mlVsPhysicsDelta ?? undefined,
+      },
+    };
+
+    return computeFullRunDiff(previousRun, currentRunPreview);
+  }, [
+    previousRun,
+    analysis.prediction,
+    analysis.financial,
+    analysis.explanation,
+    analysis.geometry,
+    analysis.monthly,
+    analysis.dataProvenance,
+    analysis.physicsSimulation,
+    analysis.mlVsPhysicsDelta,
+    systemConfig,
+  ]);
+
   return (
-    <section className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold">Analysis results</h2>
-        <p className="text-sm text-muted-foreground">Output, costs, and explanation in one view.</p>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <Button variant="outline" onClick={onAnalyzeNewLocation}>Analyze new location</Button>
-
-        <Dialog open={saveDialogOpen} onOpenChange={onSaveDialogChange}>
-          <DialogTrigger asChild>
-            <Button className="bg-amber-400 text-foreground hover:bg-amber-500" disabled={!canSaveAnalysis}>
-              Save analysis
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Name this analysis</DialogTitle>
-            </DialogHeader>
-            <div className="grid gap-2">
-              <Label htmlFor="save-analysis-name">Location name</Label>
-              <Input
-                id="save-analysis-name"
-                placeholder="e.g., Home Rooftop - Jaipur"
-                value={saveName}
-                onChange={(event) => onSaveNameChange(event.target.value)}
-              />
-            </div>
-            {saveStatus && <p className="text-sm text-muted-foreground">{saveStatus}</p>}
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button variant="outline" onClick={() => onSaveDialogChange(false)}>Cancel</Button>
-              <Button
-                className="bg-amber-400 text-foreground hover:bg-amber-500"
-                onClick={onSave}
-                disabled={!saveName.trim() || !canSaveAnalysis}
-              >
-                Save
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <Button asChild variant="outline">
-          <Link href="/locations" onClick={onOpenLocations}>Open locations ({locationsCount})</Link>
-        </Button>
-      </div>
-
-      <div className="space-y-6">
-        <div className="mx-auto max-w-5xl">
-          <OutputChart monthly={analysis.monthly} isLoading={analysis.stage === "location"} />
+    <section className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+          {previousRun ? (
+            <Badge variant="outline" className="mr-1 font-mono text-[11px]">
+              Re-analysis · Δ vs. previous run ({reanalysisLocationName ?? "saved site"})
+            </Badge>
+          ) : null}
+          {analysis.activeDocuments.length > 0 ? (
+            <>
+              <span className="mr-1 text-xs text-muted-foreground">Sources</span>
+              {analysis.activeDocuments.map((doc) => (
+                <Badge
+                  key={doc}
+                  variant="secondary"
+                  className="rounded-full px-2 py-0 text-[10px] font-normal"
+                >
+                  {doc.replace(".md", "")}
+                </Badge>
+              ))}
+            </>
+          ) : null}
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <PredictionCard
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={onAnalyzeNewLocation}>
+            New location
+          </Button>
+          {skipSaveNamePrompt ? (
+            <Button size="sm" disabled={!canSaveAnalysis} onClick={handleSave}>
+              Save run to {reanalysisLocationName ?? "site"}
+            </Button>
+          ) : (
+            <Drawer
+              open={saveDialogOpen}
+              onOpenChange={onSaveDialogChange}
+              direction="right"
+            >
+              <DrawerTrigger asChild>
+                <Button size="sm" disabled={!canSaveAnalysis}>
+                  Save
+                </Button>
+              </DrawerTrigger>
+              <DrawerContent className="data-[vaul-drawer-direction=right]:sm:max-w-md">
+                <DrawerHeader>
+                  <DrawerTitle>Name this analysis</DrawerTitle>
+                </DrawerHeader>
+                <div className="grid gap-2 px-4">
+                  <Label htmlFor="save-analysis-name">Location name</Label>
+                  <Input
+                    id="save-analysis-name"
+                    placeholder="Home Rooftop"
+                    value={saveName}
+                    onChange={(event) => onSaveNameChange(event.target.value)}
+                  />
+                  {saveStatus ? (
+                    <p className="text-sm text-muted-foreground">{saveStatus}</p>
+                  ) : null}
+                </div>
+                <DrawerFooter>
+                  <Button
+                    onClick={handleSave}
+                    disabled={!saveName.trim() || !canSaveAnalysis}
+                  >
+                    Save
+                  </Button>
+                  <DrawerClose asChild>
+                    <Button variant="outline">Cancel</Button>
+                  </DrawerClose>
+                </DrawerFooter>
+              </DrawerContent>
+            </Drawer>
+          )}
+          <Button asChild variant="outline" size="sm">
+            <Link href="/locations" onClick={onOpenLocations}>
+              Locations ({locationsCount})
+            </Link>
+          </Button>
+        </div>
+      </div>
+
+      <BentoGrid className="results-bento">
+        <BentoGridCell index={0} className="lg:col-span-2">
+          <OutputEngineeringCard
             prediction={analysis.prediction}
-            isLoading={analysis.stage === "location" || analysis.stage === "prediction"}
+            physicsSimulation={analysis.physicsSimulation}
+            isPredictionLoading={
+              analysis.stage === "location" || analysis.stage === "prediction"
+            }
+            isEngineeringLoading={analysis.stage === "physics"}
             dataProvenance={analysis.dataProvenance}
+            effectiveDelta={effectiveDelta}
+            diff={fullDiff}
+            compareLabel="Previous run"
           />
+        </BentoGridCell>
+
+        <BentoGridCell index={1} stretch className="lg:col-span-2 lg:self-stretch">
           <FinancialCard
             financial={analysis.financial}
             geometry={analysis.geometry}
@@ -118,84 +246,51 @@ export function ResultsView({
               analysis.stage === "physics" ||
               analysis.stage === "financial"
             }
+            dense
+            fillHeight
+            diff={fullDiff}
+            compareLabel="Previous run"
           />
-        </div>
+        </BentoGridCell>
 
-        <RecommendationsCard
-          prediction={analysis.prediction}
-          financial={analysis.financial}
-          lat={lat}
-          lon={lon}
-        />
+        <BentoGridCell index={2} className="lg:col-span-4">
+          <OutputChart
+            monthly={analysis.monthly}
+            isLoading={analysis.stage === "location"}
+            wide
+          />
+        </BentoGridCell>
 
-        <WhatIfPanel prediction={analysis.prediction} baseline={analysis.financial} />
+        <BentoGridCell index={3} className="lg:col-span-4">
+          <RecommendationsCard
+            prediction={analysis.prediction}
+            financial={analysis.financial}
+            lat={lat}
+            lon={lon}
+          />
+        </BentoGridCell>
 
-        {(analysis.physicsSimulation || analysis.stage === "physics") && (
-          <Card className="glass-card">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Engineering check</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              {analysis.stage === "physics" && !analysis.physicsSimulation ? (
-                <div className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Running the engineering check...
-                </div>
-              ) : analysis.physicsSimulation?.status === "ok" ? (
-                <>
-                  <p>
-                    Annual Energy: <span className="font-medium text-foreground">{analysis.physicsSimulation.annual_energy_kwh?.toLocaleString()} kWh</span>
-                  </p>
-                  <p>
-                    Capacity Factor: <span className="font-medium text-foreground">{analysis.physicsSimulation.capacity_factor_pct}%</span>
-                  </p>
-                  {effectiveDelta && (
-                    <p>
-                      Estimate vs engineering delta: <span className="font-medium text-foreground">{effectiveDelta.delta_kwh.toLocaleString()} kWh</span>
-                      {effectiveDelta.delta_pct !== null && (
-                        <span className="font-medium text-foreground"> ({effectiveDelta.delta_pct}%)</span>
-                      )}
-                    </p>
-                  )}
-                </>
-              ) : (
-                <p className="text-red-600">
-                  {analysis.physicsSimulation?.error ?? analysis.physicsSimulation?.reason ?? "Engineering check unavailable."}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        )}
+        <BentoGridCell index={4} className="lg:col-span-4">
+          <WhatIfPanel
+            prediction={analysis.prediction}
+            baseline={analysis.financial}
+            compact
+          />
+        </BentoGridCell>
 
-        <ExplanationPanel
-          explanation={analysis.explanation}
-          isLoading={
-            analysis.stage === "location" ||
-            analysis.stage === "prediction" ||
-            analysis.stage === "financial" ||
-            analysis.stage === "explanation"
-          }
-        />
-
-        {analysis.activeDocuments.length > 0 && (
-          <Card className="glass-card">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Sources used</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-2">
-              {analysis.activeDocuments.map((doc) => (
-                <Badge
-                  key={doc}
-                  variant="secondary"
-                  className="text-xs bg-amber-100/60 text-amber-900 border-amber-200"
-                >
-                  {doc.replace(".md", "")}
-                </Badge>
-              ))}
-            </CardContent>
-          </Card>
-        )}
-      </div>
+        <BentoGridCell index={5} className="lg:col-span-4">
+          <ExplanationPanel
+            explanation={analysis.explanation}
+            isLoading={
+              analysis.stage === "location" ||
+              analysis.stage === "prediction" ||
+              analysis.stage === "financial" ||
+              analysis.stage === "explanation"
+            }
+            compact
+          />
+        </BentoGridCell>
+      </BentoGrid>
     </section>
   );
 }

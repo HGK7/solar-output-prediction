@@ -1,18 +1,20 @@
 "use client";
 
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 
 export default function Template({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const reduce = useReducedMotion();
+
   return (
     <motion.div
-      initial={{ opacity: 0 }}
+      initial={reduce ? false : { opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ duration: 0.22, ease: "easeOut" }}
-      className="h-full min-h-0"
+      transition={{ duration: reduce ? 0 : 0.22, ease: "easeOut" }}
+      className="min-h-0"
     >
       {children}
     </motion.div>

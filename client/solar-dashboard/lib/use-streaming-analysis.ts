@@ -94,6 +94,7 @@ export function useStreamingAnalysis() {
   // Start analysis - prepare state
   const startAnalysis = useCallback(() => {
     if (watchdogRef.current) clearTimeout(watchdogRef.current);
+    if (cancelRef.current) cancelRef.current();
     cancelRef.current = null;
     receivedEventsRef.current.clear();
     isStreamingRef.current = true;
@@ -172,11 +173,13 @@ export function useStreamingAnalysis() {
   const completeAnalysis = useCallback(() => {
     if (!mountedRef.current) return;
     if (watchdogRef.current) clearTimeout(watchdogRef.current);
+    if (cancelRef.current) cancelRef.current();
+    cancelRef.current = null;
     isStreamingRef.current = false;
 
     // Transition: complete -> idle after grace period.
     // Never keep the UI in a loading stage when the stream has ended.
-    const requiredEvents = ["location", "prediction", "physics", "financial", "geometry", "explanation"];
+    const requiredEvents = ["prediction", "financial"];
     const missingEvents = requiredEvents.filter((e) => !receivedEventsRef.current.has(e));
 
     updateState({
