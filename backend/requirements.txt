@@ -10,7 +10,8 @@ gunicorn>=23.0,<24.0
 # --- ML / Data (inference + build-time training) ---
 numpy>=2.1,<3.0
 pandas>=2.2,<3.0
-scikit-learn>=1.6,<2.0
+# Pinned to the version that wrote trained_models/*.joblib; retrain before bumping.
+scikit-learn==1.8.0
 joblib>=1.4,<2.0
 
 # --- LLM (explanation + /ask; lazy if key missing) ---
